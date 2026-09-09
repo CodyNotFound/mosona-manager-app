@@ -376,7 +376,6 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
   // ---------------------------------------------------------------- delete
 
   Future<void> _delete(User u) async {
-    final pwdController = TextEditingController();
     final password = await showDialog<String>(
       context: context,
       builder: (_) => ConfirmNameDialog(
@@ -386,17 +385,10 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
             '输入 "${u.username}" 以确认删除，并输入管理员当前密码。'),
         name: u.username,
         confirmLabel: t(context, 'Delete', '删除'),
-        extraField: TextField(
-          controller: pwdController,
-          obscureText: true,
-          decoration: InputDecoration(
-            isDense: true,
-            labelText: t(context, 'Your password', '管理员密码'),
-          ),
-        ),
+        extraLabel: t(context, 'Your password', '管理员密码'),
       ),
     );
-    if (password == null || !mounted) return;
+    if (password == null || password.isEmpty || !mounted) return;
     try {
       final e = await _api.adminUserDelete(
         u.id,

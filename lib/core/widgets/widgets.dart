@@ -549,14 +549,20 @@ class ConfirmNameDialog extends StatefulWidget {
     required this.message,
     required this.name,
     this.confirmLabel,
-    this.extraField,
+    this.extraLabel,
+    this.extraObscure = true,
   });
 
   final String title;
   final String message;
   final String name; // text the user must type to enable confirm
   final String? confirmLabel;
-  final Widget? extraField; // e.g. admin current-password field
+
+  /// Optional second required input (e.g. admin current password). The dialog
+  /// owns this field: confirm stays disabled until it is non-empty and pops
+  /// its text (empty string when [extraLabel] is null).
+  final String? extraLabel;
+  final bool extraObscure;
 
   @override
   State<ConfirmNameDialog> createState() => _ConfirmNameDialogState();
@@ -565,8 +571,11 @@ class ConfirmNameDialog extends StatefulWidget {
 class _ConfirmNameDialogState extends State<ConfirmNameDialog> {
   final _controller = TextEditingController();
   final _extra = TextEditingController();
-  bool get _valid =>
-      _controller.text.trim() == widget.name;
+
+  bool get _nameOk => _controller.text.trim() == widget.name;
+  bool get _extraOk =>
+      widget.extraLabel == null || _extra.text.isNotEmpty;
+  bool get _valid => _nameOk && _extraOk;
 
   @override
   void dispose() {
@@ -595,9 +604,17 @@ class _ConfirmNameDialogState extends State<ConfirmNameDialog> {
             ),
             onChanged: (_) => setState(() {}),
           ),
-          if (widget.extraField != null) ...[
+          if (widget.extraLabel != null) ...[
             const SizedBox(height: 12),
-            widget.extraField!,
+            TextField(
+              controller: _extra,
+              obscureText: widget.extraObscure,
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: widget.extraLabel,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
           ],
         ],
       ),

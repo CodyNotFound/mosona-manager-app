@@ -204,7 +204,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<void> _leaveTeam(Team team) async {
     final wasActive = ref.read(sessionProvider).team?.id == team.id;
-    final ok = await showDialog<bool>(
+    final ok = await showDialog<String>(
       context: context,
       builder: (_) => ConfirmNameDialog(
         title: t(context, 'Leave team', '退出团队', zhHk: '離開團隊'),
@@ -218,7 +218,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         confirmLabel: t(context, 'Leave', '退出', zhHk: '離開'),
       ),
     );
-    if (ok != true || !mounted) return;
+    if (ok == null || !mounted) return;
     try {
       await _api.leaveTeam(team.id);
       await _refresh();

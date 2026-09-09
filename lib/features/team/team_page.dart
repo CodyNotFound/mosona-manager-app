@@ -527,7 +527,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
   Future<void> _leaveTeam() async {
     final team = _team;
     if (team == null) return;
-    final ok = await showDialog<bool>(
+    final ok = await showDialog<String>(
       context: context,
       builder: (_) => ConfirmNameDialog(
         title: t(context, 'Leave team', '退出团队'),
@@ -540,7 +540,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         confirmLabel: t(context, 'Leave', '退出'),
       ),
     );
-    if (ok != true || !mounted) return;
+    if (ok == null || !mounted) return;
     try {
       await _api.leaveTeam(team.id);
       await ref.read(sessionProvider.notifier).refresh();
