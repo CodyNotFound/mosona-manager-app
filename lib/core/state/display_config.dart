@@ -14,6 +14,7 @@ class DisplayConfig {
     this.monitorLayout = 'grid-2',
     this.dashboardLayout = 'grid',
     this.showDetails = false,
+    this.terminalRenderer = 'xterm',
   });
 
   String defaultTimeFrame; // real-time | 1h | 12h | 24h | 7d | 30d | 365d
@@ -21,8 +22,9 @@ class DisplayConfig {
   String monitorMode; // avg | max | raw
   String minMaxMode; // min-auto | 0-auto | 0-max
   String monitorLayout; // grid-3 | grid-2 | list
-  String dashboardLayout; // grid | list
+  String dashboardLayout; // grid | list | list2
   bool showDetails;
+  String terminalRenderer; // xterm (ghostty-web is a WASM renderer, web-only)
 
   Map<String, dynamic> toJson() => {
         'defaultTimeFrame': defaultTimeFrame,
@@ -32,6 +34,7 @@ class DisplayConfig {
         'defaultLayout': monitorLayout,
         'dashboardLayout': dashboardLayout,
         'dashboardShowDetails': showDetails,
+        'terminalRenderer': terminalRenderer,
       };
 
   factory DisplayConfig.fromJson(Map<String, dynamic> m) => DisplayConfig(
@@ -42,6 +45,7 @@ class DisplayConfig {
         monitorLayout: m['defaultLayout'] as String? ?? 'grid-2',
         dashboardLayout: m['dashboardLayout'] as String? ?? 'grid',
         showDetails: m['dashboardShowDetails'] as bool? ?? false,
+        terminalRenderer: m['terminalRenderer'] as String? ?? 'xterm',
       );
 }
 
