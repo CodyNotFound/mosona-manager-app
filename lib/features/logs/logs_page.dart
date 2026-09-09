@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Directory, File;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -109,6 +110,15 @@ class _LogsPageState extends ConsumerState<LogsPage> {
 
   Future<m.LogsPage> _fetchPage({String? cursor, required int pageSize}) {
     final now = DateTime.now();
+    return _fetchPageRange(cursor: cursor, pageSize: pageSize, end: now);
+  }
+
+  Future<m.LogsPage> _fetchPageRange({
+    String? cursor,
+    required int pageSize,
+    required DateTime end,
+  }) {
+    final now = end;
     return ref.read(apiProvider).logsList(
           cursor: cursor,
           pageSize: pageSize,
@@ -139,48 +149,11 @@ class _LogsPageState extends ConsumerState<LogsPage> {
   // ------------------------------------------------------------------ export
 
   Future<void> _export() async {
-    final countCtrl = TextEditingController(text: '100');
-    final confirmed = await showDialog<bool>(
+    final limit = await showDialog<int>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(t(context, 'Export logs', '导出日志')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t(context,
-                  'Fetch the most recent entries matching the current filters and share them as JSON.',
-                  '按当前筛选条件获取最近的记录，并以 JSON 分享。'),
-              style: const TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: countCtrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: t(context, 'Count (1-1000)', '数量（1-1000）'),
-                isDense: true,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(t(context, 'Cancel', '取消')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(t(context, 'Export', '导出')),
-          ),
-        ],
-      ),
+      builder: (dialogContext) => const _ExportDialog(),
     );
-    if (confirmed != true || !mounted) return;
-    final limit = math.max(1, math.min(int.tryParse(countCtrl.text) ?? 100, 1000));
+    if (limit == null || !mounted) return;
 
     final navigator = Navigator.of(context);
     unawaited(showDialog<void>(
@@ -201,13 +174,16 @@ class _LogsPageState extends ConsumerState<LogsPage> {
       ),
     ));
     try {
+      // Keep one range end for both fetching and the exported filters
+      // (web uses its mount-time rangeEnd, logs/index.tsx:143-158).
+      final end = DateTime.now();
       final rawLogs = <Map<String, dynamic>>[];
       String? cursor;
       var hasMore = true;
       while (rawLogs.length < limit && hasMore) {
         final remaining = limit - rawLogs.length;
-        final page = await _fetchPage(
-            cursor: cursor, pageSize: math.min(remaining, 1000));
+        final page = await _fetchPageRange(
+            cursor: cursor, pageSize: math.min(remaining, 1000), end: end);
         for (final l in page.logs) {
           rawLogs.add(_logJson(l));
         }
@@ -215,8 +191,8 @@ class _LogsPageState extends ConsumerState<LogsPage> {
         hasMore = page.hasMore && page.nextCursor.isNotEmpty;
         cursor = page.nextCursor.isEmpty ? null : page.nextCursor;
       }
-      final payload = jsonEncode({
-        'exported_at': DateTime.now().toIso8601String(),
+      final bundle = {
+        'exported_at': DateTime.now().toUtc().toIso8601String(),
         'source': widget.admin ? 'admin' : 'team',
         'requested_limit': limit,
         'exported_count': rawLogs.length,
@@ -225,16 +201,28 @@ class _LogsPageState extends ConsumerState<LogsPage> {
           'level': _level,
           'email': _emailCtrl.text.trim(),
           'message': _messageCtrl.text.trim(),
-          'days': _effectiveDays,
+          'range_days': _effectiveDays,
+          'range_end': end.toUtc().toIso8601String(),
         },
         'logs': rawLogs,
-      });
+      };
+      final payload =
+          '${const JsonEncoder.withIndent('  ').convert(bundle)}\n';
+      final fileName =
+          '${widget.admin ? 'admin-' : ''}logs-export-${DateFormat('yyyy-MM-dd').format(end)}.json';
       navigator.pop();
+      // Land the export as a real .json file (web downloads
+      // logs-export-YYYY-MM-DD.json); the share sheet receives the file.
+      final file = File(
+          '${Directory.systemTemp.path}/$fileName');
+      await file.writeAsString(payload, flush: true);
       await SharePlus.instance.share(ShareParams(
-        text: payload,
-        subject:
-            'logs-export-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json',
+        files: [XFile(file.path, mimeType: 'application/json')],
+        subject: fileName,
       ));
+      try {
+        await file.delete();
+      } catch (_) {}
     } catch (e) {
       navigator.pop();
       if (mounted) showApiError(context, e);
@@ -721,6 +709,77 @@ class _LogsPageState extends ConsumerState<LogsPage> {
             icon: const Icon(Icons.chevron_right, size: 18),
             label: Text(t(context, 'Next', '下一页')),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Export dialog: count input validated in [1,1000]; pops with the parsed
+/// limit, or shows a warning toast and stays open on invalid values
+/// (web page/logs/index.tsx:174-179).
+class _ExportDialog extends StatefulWidget {
+  const _ExportDialog();
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  final _controller = TextEditingController(text: '100');
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final v = int.tryParse(_controller.text.trim());
+    if (v == null || v <= 0 || v > 1000) {
+      toastWarn(context,
+          t(context, 'Please enter a valid number of records.', '请输入有效的记录数'));
+      return;
+    }
+    Navigator.of(context).pop(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(t(context, 'Export logs', '导出日志')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            t(context,
+                'Fetch the most recent entries matching the current filters and share them as JSON.',
+                '按当前筛选条件获取最近的记录，并以 JSON 分享。'),
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onSubmitted: (_) => _submit(),
+            decoration: InputDecoration(
+              labelText: t(context, 'Count (1-1000)', '数量（1-1000）'),
+              isDense: true,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: Text(t(context, 'Cancel', '取消')),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(t(context, 'Export', '导出')),
         ),
       ],
     );
