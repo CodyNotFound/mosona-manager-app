@@ -205,16 +205,20 @@ class _ConnectChecker extends ConsumerStatefulWidget {
 class _ConnectCheckerState extends ConsumerState<_ConnectChecker> {
   /// Latency history; 0 = not measured yet, -1 = failed, >0 = milliseconds.
   static const _historyLength = 10;
-  final List<int> _pings = List.filled(_historyLength, 0);
+  final List<int> _pings = List.filled(_historyLength, 0, growable: true);
   bool _pingOk = false;
   Timer? _timer;
+
+  /// Captured in initState so dispose() never touches ref (unsafe unmounted).
+  late final ValueNotifier<MonitorConn> _conn;
 
   @override
   void initState() {
     super.initState();
     // Touching the notifier starts the monitor SSE subscription whose conn
     // state feeds the dot (green on live events, red when lost/revoked).
-    ref.read(monitorProvider.notifier).conn.addListener(_onConnChanged);
+    _conn = ref.read(monitorProvider.notifier).conn;
+    _conn.addListener(_onConnChanged);
     unawaited(_ping());
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _ping());
   }
@@ -222,7 +226,7 @@ class _ConnectCheckerState extends ConsumerState<_ConnectChecker> {
   @override
   void dispose() {
     _timer?.cancel();
-    ref.read(monitorProvider.notifier).conn.removeListener(_onConnChanged);
+    _conn.removeListener(_onConnChanged);
     super.dispose();
   }
 
