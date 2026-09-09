@@ -56,7 +56,11 @@ class LocaleController extends Notifier<String> {
 
 class ServerConfigController extends Notifier<String> {
   @override
-  String build() => _prefs().getString(_kServerUrl) ?? '';
+  String build() =>
+      _prefs().getString(_kServerUrl) ??
+      (const bool.fromEnvironment('dart.vm.product')
+          ? ''
+          : const String.fromEnvironment('MOSONA_DEMO_URL'));
 
   SharedPreferences _prefs() => ref.read(sharedPrefsProvider);
 

@@ -71,13 +71,39 @@ class SessionController extends Notifier<SessionState> {
     } on ApiException catch (e) {
       if (e.code == 'init_required') {
         state = SessionState(status: SessionStatus.loggedOut, needsInit: true);
-      } else if (e.code == 'login') {
-        state = SessionState(status: SessionStatus.loggedOut);
-      } else {
-        // Server unreachable etc: stay logged out so user can fix the URL.
-        state = SessionState(status: SessionStatus.loggedOut);
+        return;
       }
+      // Dev convenience (flutter run --dart-define): auto-login demo account.
+      if (e.code == 'login') {
+        await _tryDemoLogin();
+        return;
+      }
+      // Server unreachable etc: stay logged out so user can fix the URL.
+      state = SessionState(status: SessionStatus.loggedOut);
     }
+  }
+
+  static const _demoEmail = String.fromEnvironment('MOSONA_DEMO_EMAIL');
+  static const _demoPass = String.fromEnvironment('MOSONA_DEMO_PASS');
+
+  Future<void> _tryDemoLogin() async {
+    if (_demoEmail.isEmpty || _demoPass.isEmpty) {
+      state = SessionState(status: SessionStatus.loggedOut);
+      return;
+    }
+    try {
+      final env = await _api.login(_demoEmail, _demoPass, rememberMe: true);
+      if (env.isOk) {
+        await bootstrap();
+        return;
+      }
+      if (env.code == '2fa_required' || env.code == 'verify') {
+        // demo account has no 2FA; treat as failure
+      }
+    } on ApiException {
+      // fall through to logged out
+    }
+    state = SessionState(status: SessionStatus.loggedOut);
   }
 
   /// Called after a successful login / 2FA completion.
