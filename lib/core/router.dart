@@ -41,6 +41,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     refreshListenable: refresh,
     initialLocation: '/',
+    errorBuilder: (context, state) => _NotFoundPage(error: state.error?.toString()),
     redirect: (context, state) {
       final sess = ref.read(sessionProvider);
       final path = state.matchedLocation;
@@ -52,6 +53,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (sess.needsInit) return path == '/init' ? null : '/init';
       if (!sess.isLoggedIn) return isPublic ? null : '/auth';
       if (isPublic && path != '/2fa') return '/';
+      // admin section requires is_admin (web parity: non-admins are bounced)
+      if (path == '/admin' || path.startsWith('/admin/')) {
+        if (sess.user?.isAdmin != true) return '/';
+      }
       if (!sess.hasTeam &&
           !_publicRoutes.contains(path) &&
           path != '/create-team' &&
@@ -143,3 +148,37 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// Web-parity 404 page.
+class _NotFoundPage extends StatelessWidget {
+  const _NotFoundPage({this.error});
+
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('404',
+                style: TextStyle(
+                    fontSize: 64,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            Text('Page not found / 页面不存在',
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 20),
+            OutlinedButton(
+              onPressed: () => context.go('/'),
+              child: const Text('Go back / 返回'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
