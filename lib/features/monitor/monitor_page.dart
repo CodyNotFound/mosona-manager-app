@@ -28,20 +28,6 @@ class MonitorPage extends ConsumerStatefulWidget {
 
 class _MonitorPageState extends ConsumerState<MonitorPage> {
   static const _frameOptions = ['real-time', '1h', '12h', '24h', '7d', '30d', '365d'];
-  static const _diskPalette = [
-    MColors.chartOrange2,
-    MColors.chartYellow2,
-    MColors.chartRed2,
-    MColors.chartBlue2,
-    MColors.chartViolet2,
-    MColors.chartGreen2,
-    MColors.chartOrange1,
-    MColors.chartYellow1,
-    MColors.chartRed1,
-    MColors.chartBlue1,
-    MColors.chartViolet1,
-    MColors.chartGreen1,
-  ];
 
   MonitorInfoResult? _info;
   bool _loading = true;
@@ -55,6 +41,11 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
   List<ServerStatus> _buffer = [];
   List<ServerStatus>? _chart;
   bool _chartLoading = false;
+
+  /// Transient per-chart aggregation overrides for the CPU / IO / bandwidth
+  /// card headers (web `monitor-chart.tsx` local mode select; reset when the
+  /// global default changes, never persisted).
+  final Map<String, String> _chartModes = {};
 
   late String _timeFrame;
   Timer? _pollTimer;
@@ -157,7 +148,8 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
       _chart = null;
       _chartLoading = f != 'real-time';
     });
-    _syncRefreshTimer();
+    // Persist as the user's default (web index.tsx: updateConfig({defaultTimeFrame})).
+    _updateConfig((c) => c.defaultTimeFrame = f);
     if (f != 'real-time') _fetchChart();
   }
 
@@ -191,7 +183,18 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
   }
 
   String _frameLabel(String f) =>
-      f == 'real-time' ? t(context, 'Real-time', '实时') : f.toUpperCase();
+      f == 'real-time' ? t(context, 'Real-time', '实时', zhHk: '即時') : f.toUpperCase();
+
+  /// Length of the fixed X window per time frame (web monitor-chart startTime).
+  Duration get _windowLength => switch (_timeFrame) {
+        '1h' => const Duration(hours: 1),
+        '12h' => const Duration(hours: 12),
+        '24h' => const Duration(hours: 24),
+        '7d' => const Duration(days: 7),
+        '30d' => const Duration(days: 30),
+        '365d' => const Duration(days: 365),
+        _ => Duration.zero,
+      };
 
   String _xLabel(double v) {
     final dt = DateTime.fromMillisecondsSinceEpoch((v * 1000).round());
@@ -249,7 +252,7 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
 
   Widget _appBarTitle() {
     final detail = _info?.info;
-    if (detail == null) return Text(t(context, 'Monitor', '监控'));
+    if (detail == null) return Text(t(context, 'Monitor', '监控', zhHk: '監察'));
     final list = detail.list;
     final area = (list.area ?? '').trim();
     return Column(
@@ -275,7 +278,8 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
                 return MBadge(
                   color: online ? MColors.online : MColors.offline,
                   small: true,
-                  child: Text(t(context, online ? 'online' : 'offline', online ? '在线' : '离线')),
+                  child: Text(t(context, online ? 'online' : 'offline', online ? '在线' : '离线',
+                      zhHk: online ? '在線' : '離線')),
                 );
               },
             ),
@@ -301,7 +305,7 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
               MBadge(
                 color: MColors.warning,
                 small: true,
-                child: Text(t(context, 'stale', '过期')),
+                child: Text(t(context, 'stale', '过期', zhHk: '過期')),
               ),
             ],
           ],
@@ -330,12 +334,13 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             EmptyState(
-              text: t(context, 'Failed to load monitor data', '监控数据加载失败'),
+              text: t(context, 'Failed to load monitor data', '监控数据加载失败',
+                  zhHk: '監察數據載入失敗'),
               icon: Icons.error_outline,
             ),
             const SizedBox(height: 8),
             LoadingButton(
-              label: t(context, 'Retry', '重试'),
+              label: t(context, 'Retry', '重试', zhHk: '重試'),
               onPressed: () {
                 setState(() => _loading = true);
                 _loadInfo();
@@ -389,11 +394,11 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
       rows.add(InfoRow(label: 'IP', value: d.ip));
     }
     if (d.hostname != null && d.hostname!.isNotEmpty) {
-      rows.add(InfoRow(label: t(context, 'Hostname', '主机名'), value: d.hostname));
+      rows.add(InfoRow(label: t(context, 'Hostname', '主机名', zhHk: '主機名稱'), value: d.hostname));
     }
     if (os.isNotEmpty) {
       rows.add(InfoRow(
-        label: t(context, 'System', '系统'),
+        label: t(context, 'System', '系统', zhHk: '系統'),
         child: Row(children: [
           OsIcon(os: d.list.os, size: 16),
           const SizedBox(width: 6),
@@ -402,10 +407,10 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
       ));
     }
     if (d.arch != null && d.arch!.isNotEmpty) {
-      rows.add(InfoRow(label: t(context, 'Arch', '架构'), value: d.arch));
+      rows.add(InfoRow(label: t(context, 'Arch', '架构', zhHk: '架構'), value: d.arch));
     }
     if (d.kernel != null && d.kernel!.isNotEmpty) {
-      rows.add(InfoRow(label: t(context, 'Kernel', '内核'), value: d.kernel));
+      rows.add(InfoRow(label: t(context, 'Kernel', '内核', zhHk: '核心'), value: d.kernel));
     }
     if (d.cpuName != null && d.cpuName!.isNotEmpty) {
       final cores = '(${d.coreC ?? '?'}C/${d.coreT ?? '?'}T)';
@@ -421,15 +426,15 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
     }
     if (live != null) {
       rows.add(InfoRow(
-        label: t(context, 'Total up/down', '累计上传/下载'),
+        label: t(context, 'Total up/down', '累计上传/下载', zhHk: '上載/下載總量'),
         value: '↑ ${mbTotal(live.txTotalMb)} · ↓ ${mbTotal(live.rxTotalMb)}',
       ));
       rows.add(InfoRow(
-        label: t(context, 'CPU usage', 'CPU 占用'),
+        label: t(context, 'CPU usage', 'CPU 占用', zhHk: 'CPU 使用率'),
         value: '${live.cpu.toStringAsFixed(1)}%',
       ));
       rows.add(InfoRow(
-        label: t(context, 'Memory', '内存'),
+        label: t(context, 'Memory', '内存', zhHk: '記憶體'),
         value:
             '${mbTotal(live.memUsedMb)} / ${mbTotal(live.memTotalMb)} · ${live.memPercent.toStringAsFixed(1)}%',
       ));
@@ -443,15 +448,15 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
         ));
       }
       rows.add(InfoRow(
-        label: t(context, 'Disk IO', '磁盘 IO'),
+        label: t(context, 'Disk IO', '磁盘 IO', zhHk: '磁碟 I/O'),
         value: 'R ${netRate(live.diskReadKibS)} · W ${netRate(live.diskWriteKibS)}',
       ));
       rows.add(InfoRow(
-        label: t(context, 'Network', '实时网速'),
+        label: t(context, 'Network', '实时网速', zhHk: '即時網速'),
         value: '↑ ${netRate(live.txKibS)} · ↓ ${netRate(live.rxKibS)}',
       ));
       rows.add(InfoRow(
-        label: t(context, 'TCP/UDP', '连接数'),
+        label: t(context, 'TCP/UDP', '连接数', zhHk: '連線數'),
         value: 'TCP ${compactNumber(live.tcpTotal)} · UDP ${compactNumber(live.udpTotal)}',
       ));
     }
@@ -478,7 +483,7 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
           ),
         ),
         IconButton(
-          tooltip: t(context, 'Chart settings', '图表设置'),
+          tooltip: t(context, 'Chart settings', '图表设置', zhHk: '圖表設定'),
           icon: const Icon(Icons.tune, size: 20),
           onPressed: _openSettings,
         ),
@@ -517,7 +522,7 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
   Future<void> _openSettings() {
     return showMSheet(
       context: context,
-      title: t(context, 'Chart settings', '图表设置'),
+      title: t(context, 'Chart settings', '图表设置', zhHk: '圖表設定'),
       child: Consumer(builder: (context, sheetRef, _) {
         final cfg = sheetRef.watch(displayConfigProvider);
         final mode = ['avg', 'max', 'raw'].contains(cfg.monitorMode) ? cfg.monitorMode : 'avg';
@@ -527,28 +532,36 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(t(context, 'Aggregation', '聚合方式'),
+            Text(t(context, 'Aggregation', '聚合方式', zhHk: '匯總方式'),
                 style: const TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: [
-                ButtonSegment(value: 'avg', label: Text(t(context, 'Avg', '平均'))),
-                ButtonSegment(value: 'max', label: Text(t(context, 'Max', '最大'))),
-                ButtonSegment(value: 'raw', label: Text(t(context, 'Raw', '原始'))),
+                ButtonSegment(value: 'avg', label: Text(t(context, 'Avg', '平均', zhHk: '平均值'))),
+                ButtonSegment(value: 'max', label: Text(t(context, 'Max', '最大', zhHk: '最大值'))),
+                ButtonSegment(value: 'raw', label: Text(t(context, 'Raw', '原始', zhHk: '原始數據'))),
               ],
               selected: {mode},
               showSelectedIcon: false,
-              onSelectionChanged: (s) => _updateConfig((c) => c.monitorMode = s.first),
+              onSelectionChanged: (s) {
+                // Web resets the per-chart mode selects when the default changes.
+                setState(() => _chartModes.clear());
+                _updateConfig((c) => c.monitorMode = s.first);
+              },
             ),
             const SizedBox(height: 16),
-            Text(t(context, 'Y axis', 'Y 轴'),
+            Text(t(context, 'Y axis', 'Y 轴', zhHk: 'Y 軸'),
                 style: const TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: [
-                ButtonSegment(value: 'min-auto', label: Text(t(context, 'Min auto', '最小自动'))),
-                ButtonSegment(value: '0-auto', label: Text(t(context, '0 auto', '0 自动'))),
-                ButtonSegment(value: '0-max', label: Text(t(context, '0 max', '0 最大'))),
+                ButtonSegment(
+                    value: 'min-auto',
+                    label: Text(t(context, 'Min auto', '最小自动', zhHk: '最小值 - 自動'))),
+                ButtonSegment(
+                    value: '0-auto', label: Text(t(context, '0 auto', '0 自动', zhHk: '0 自動'))),
+                ButtonSegment(
+                    value: '0-max', label: Text(t(context, '0 max', '0 最大', zhHk: '0 最大'))),
               ],
               selected: {yMode},
               showSelectedIcon: false,
@@ -557,7 +570,7 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(t(context, 'Auto refresh', '自动刷新'),
+              title: Text(t(context, 'Auto refresh', '自动刷新', zhHk: '自動重新整理'),
                   style: const TextStyle(fontSize: 14)),
               value: cfg.autoRefresh,
               onChanged: (v) => _updateConfig((c) => c.autoRefresh = v),
@@ -600,11 +613,37 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
         ? cfg.minMaxMode
         : 'min-auto';
 
+    // Fixed X window (web: domain = [now - windowLength, now]) so sparse data
+    // still spans the whole frame; real-time pins to the buffer start.
+    final nowMs = DateTime.now().millisecondsSinceEpoch / 1000;
+    double? fixedMinX;
+    final fixedMaxX = nowMs;
+    if (historical) {
+      fixedMinX = nowMs - _windowLength.inSeconds;
+    } else if (pts.isNotEmpty && pts.first.time != null) {
+      fixedMinX = pts.first.time!.millisecondsSinceEpoch / 1000;
+    }
+
+    // Per-chart transient aggregation (CPU/IO/bandwidth card headers, web only
+    // exposes them outside real-time; memory/SWAP/disk are always raw).
+    String chartAgg(String key) => historical ? (_chartModes[key] ?? agg) : agg;
+
     var delay = 60;
-    Widget card(String title, List<Widget> legend, LineChartData? data) {
+    Widget card(String title, List<Widget> legend, LineChartData? data,
+        {String? modeKey}) {
+      final interactive = historical && modeKey != null;
       final w = FadeSlideIn(
         delay: delay,
-        child: _ChartCard(title: title, legend: legend, data: data, loading: loading),
+        child: _ChartCard(
+          title: title,
+          legend: legend,
+          data: data,
+          loading: loading,
+          mode: interactive ? chartAgg(modeKey) : null,
+          onModeChanged: interactive
+              ? (m) => setState(() => _chartModes[modeKey] = m)
+              : null,
+        ),
       );
       delay += 60;
       return w;
@@ -626,24 +665,28 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
         data: ds,
         styles: styles,
         minMaxMode: yMode,
-        fixedMinY: fMin,
-        fixedMaxY: fMax,
+        // web domain: [min-auto ? 'min' : 0, 0-max ? chartMaxValue : 'auto']
+        fixedMinY: yMode == 'min-auto' ? null : (fMin ?? 0),
+        fixedMaxY: yMode == '0-max' ? fMax : null,
+        fixedMinX: fixedMinX,
+        fixedMaxX: fixedMaxX,
         yFormat: yFmt,
         xFormat: _xLabel,
         extraHorizontalLines: extra,
       );
     }
 
-    // 1. CPU %
+    // 1. CPU % (0-max cap = 100)
     final cpu = mk(
       _extract(pts, [(s) => s.cpu]),
       [ChartSeriesStyle(label: 'CPU', color: MColors.chartBlue2, format: (v) => '${v.toStringAsFixed(0)}%')],
+      mode: chartAgg('cpu'),
       fMin: 0,
       fMax: 100,
       yFmt: (v) => '${v.toStringAsFixed(0)}%',
     );
 
-    // 2. Memory used (cap = total, dashed reference line)
+    // 2. Memory used (raw; 0-max cap = total, dashed reference line)
     double? memTotal;
     for (final p in pts.reversed) {
       if (p.memTotalMb > 0) {
@@ -653,7 +696,8 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
     }
     final mem = mk(
       _extract(pts, [(s) => s.memUsedMb]),
-      [ChartSeriesStyle(label: t(context, 'Used', '已用'), color: MColors.chartGreen2, format: mbTotal)],
+      [ChartSeriesStyle(label: t(context, 'Used', '已用', zhHk: '已用'), color: MColors.chartGreen2, format: mbTotal)],
+      mode: 'raw',
       fMin: 0,
       fMax: memTotal,
       yFmt: mbTotal,
@@ -678,19 +722,20 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
         (s) => s.diskWriteIops,
       ]),
       [
-        ChartSeriesStyle(label: t(context, 'Read', '读取'), color: MColors.chartBlue2, format: netRate),
-        ChartSeriesStyle(label: t(context, 'Write', '写入'), color: MColors.chartYellow2, format: netRate),
+        ChartSeriesStyle(label: t(context, 'Read', '读取', zhHk: '讀取'), color: MColors.chartBlue2, format: netRate),
+        ChartSeriesStyle(label: t(context, 'Write', '写入', zhHk: '寫入'), color: MColors.chartYellow2, format: netRate),
         ChartSeriesStyle(
-            label: t(context, 'R IOPS', '读 IOPS'),
+            label: t(context, 'R IOPS', '读 IOPS', zhHk: '讀 IOPS'),
             color: MColors.chartBlue1,
             strokeWidth: 1,
             format: (v) => compactNumber(v.round())),
         ChartSeriesStyle(
-            label: t(context, 'W IOPS', '写 IOPS'),
+            label: t(context, 'W IOPS', '写 IOPS', zhHk: '寫 IOPS'),
             color: MColors.chartYellow1,
             strokeWidth: 1,
             format: (v) => compactNumber(v.round())),
       ],
+      mode: chartAgg('io'),
       yFmt: netRate,
     );
 
@@ -698,21 +743,34 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
     final net = mk(
       _extract(pts, [(s) => s.rxKibS, (s) => s.txKibS]),
       [
-        ChartSeriesStyle(label: '↓ ${t(context, 'Down', '下行')}', color: MColors.chartViolet2, format: netRate),
-        ChartSeriesStyle(label: '↑ ${t(context, 'Up', '上行')}', color: MColors.chartRed1, format: netRate),
+        ChartSeriesStyle(label: '↓ ${t(context, 'Down', '下行', zhHk: '下行')}', color: MColors.chartViolet2, format: netRate),
+        ChartSeriesStyle(label: '↑ ${t(context, 'Up', '上行', zhHk: '上行')}', color: MColors.chartRed1, format: netRate),
       ],
+      mode: chartAgg('net'),
       yFmt: netRate,
     );
 
-    // 5. SWAP used
+    // 5. SWAP used (raw; 0-max cap = swap total)
+    double? swapTotal;
+    for (final p in pts.reversed) {
+      if (p.swapTotalMb > 0) {
+        swapTotal = p.swapTotalMb;
+        break;
+      }
+    }
     final swap = mk(
       _extract(pts, [(s) => s.swapUsedMb]),
       [ChartSeriesStyle(label: 'SWAP', color: MColors.chartGreen2, format: mbTotal)],
+      mode: 'raw',
       fMin: 0,
+      fMax: swapTotal,
       yFmt: mbTotal,
     );
 
-    // 6. Per-mount disk usage (dedupe by mp, merge latest realtime point)
+    // 6. Per-mount disk usage: one chart per mount point (web diskChartData),
+    // discovered realtime-first then newest-history-first; 0-max cap is that
+    // disk's total_gb. History merges the newest realtime sample so the charts
+    // stay live.
     var diskPts = pts;
     final rt = _realtime.value;
     if (historical && rt != null) {
@@ -721,70 +779,89 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
         diskPts = [...pts, rt];
       }
     }
-    final mps = <String>[];
-    for (final p in diskPts) {
-      for (final d in p.disks ?? const <DiskInfo>[]) {
-        if (!mps.contains(d.mp)) mps.add(d.mp);
+    final diskDefs = <DiskInfo>[];
+    void addDisk(DiskInfo d) {
+      if (!diskDefs.any((e) => e.mp == d.mp)) diskDefs.add(d);
+    }
+
+    if (rt != null) {
+      for (final d in rt.disks ?? const <DiskInfo>[]) {
+        addDisk(d);
       }
     }
-    LineChartData? disks;
-    final diskLegend = <Widget>[];
-    if (mps.isNotEmpty) {
-      final styles = <ChartSeriesStyle>[];
-      final pickers = <double? Function(ServerStatus)>[];
-      for (var i = 0; i < mps.length; i++) {
-        final mp = mps[i];
-        final color = _diskPalette[i % _diskPalette.length];
-        styles.add(ChartSeriesStyle(label: 'Disk ${i + 1}', color: color, format: gb));
-        pickers.add((s) {
-          for (final d in s.disks ?? const <DiskInfo>[]) {
-            if (d.mp == mp) return d.usedGb;
-          }
-          return null;
-        });
-        diskLegend.add(_legendChip(color, 'Disk ${i + 1}'));
+    for (final p in pts.reversed) {
+      for (final d in p.disks ?? const <DiskInfo>[]) {
+        addDisk(d);
       }
-      disks = mk(_extract(diskPts, pickers), styles, fMin: 0, yFmt: gb);
+    }
+
+    final diskCards = <Widget>[];
+    for (var i = 0; i < diskDefs.length; i++) {
+      final def = diskDefs[i];
+      final data = mk(
+        _extract(diskPts, [
+          (s) {
+            for (final d in s.disks ?? const <DiskInfo>[]) {
+              if (d.mp == def.mp) return d.usedGb;
+            }
+            return null;
+          }
+        ]),
+        [ChartSeriesStyle(label: 'Disk ${i + 1}', color: MColors.chartOrange2, format: gb)],
+        mode: 'raw',
+        fMin: 0,
+        fMax: def.totalGb,
+        yFmt: gb,
+      );
+      diskCards.add(card('Disk ${i + 1} · ${def.mp}', [], data));
+    }
+    if (diskDefs.isEmpty) {
+      diskCards.add(card(t(context, 'Disk usage', '磁盘用量', zhHk: '磁碟用量'), [], null));
     }
 
     return [
-      card(t(context, 'CPU', 'CPU'), [], cpu),
+      card(t(context, 'CPU', 'CPU', zhHk: 'CPU'), [], cpu, modeKey: 'cpu'),
       card(
-          t(context, 'Memory', '内存'),
+          t(context, 'Memory', '内存', zhHk: '記憶體'),
           [
-            _legendChip(MColors.chartGreen2, t(context, 'Used', '已用')),
-            _legendChip(MColors.chartGreen1, t(context, 'Total', '总量')),
+            _legendChip(MColors.chartGreen2, t(context, 'Used', '已用', zhHk: '已用')),
+            _legendChip(MColors.chartGreen1, t(context, 'Total', '总量', zhHk: '總量')),
           ],
           mem),
       card(
-          t(context, 'Disk IO', '磁盘 IO'),
+          t(context, 'Disk IO', '磁盘 IO', zhHk: '磁碟 I/O'),
           [
-            _legendChip(MColors.chartBlue2, t(context, 'Read', '读取')),
-            _legendChip(MColors.chartYellow2, t(context, 'Write', '写入')),
-            _legendChip(MColors.chartBlue1, t(context, 'R IOPS', '读 IOPS')),
-            _legendChip(MColors.chartYellow1, t(context, 'W IOPS', '写 IOPS')),
+            _legendChip(MColors.chartBlue2, t(context, 'Read', '读取', zhHk: '讀取')),
+            _legendChip(MColors.chartYellow2, t(context, 'Write', '写入', zhHk: '寫入')),
+            _legendChip(MColors.chartBlue1, t(context, 'R IOPS', '读 IOPS', zhHk: '讀 IOPS')),
+            _legendChip(MColors.chartYellow1, t(context, 'W IOPS', '写 IOPS', zhHk: '寫 IOPS')),
           ],
-          io),
+          io,
+          modeKey: 'io'),
       card(
-          t(context, 'Bandwidth', '带宽'),
+          t(context, 'Bandwidth', '带宽', zhHk: '頻寬'),
           [
-            _legendChip(MColors.chartViolet2, t(context, 'Down', '下行')),
-            _legendChip(MColors.chartRed1, t(context, 'Up', '上行')),
+            _legendChip(MColors.chartViolet2, t(context, 'Down', '下行', zhHk: '下行')),
+            _legendChip(MColors.chartRed1, t(context, 'Up', '上行', zhHk: '上行')),
           ],
-          net),
-      card(t(context, 'SWAP', 'SWAP'), [], swap),
-      card(t(context, 'Disk usage', '磁盘用量'), diskLegend, disks),
+          net,
+          modeKey: 'net'),
+      card(t(context, 'SWAP', 'SWAP', zhHk: 'SWAP'), [], swap),
+      ...diskCards,
     ];
   }
 }
 
-/// One chart card: title, 160-high line chart, optional legend chips.
+/// One chart card: title with optional per-chart aggregation selector
+/// (web monitor-chart.tsx header select), 160-high line chart, legend chips.
 class _ChartCard extends StatelessWidget {
   const _ChartCard({
     required this.title,
     required this.legend,
     required this.data,
     this.loading = false,
+    this.mode,
+    this.onModeChanged,
   });
 
   final String title;
@@ -792,13 +869,32 @@ class _ChartCard extends StatelessWidget {
   final LineChartData? data;
   final bool loading;
 
+  /// Current per-chart aggregation; null hides the selector.
+  final String? mode;
+  final ValueChanged<String>? onModeChanged;
+
+  static const _modeLabels = {
+    'avg': ['Avg', '平均', '平均值'],
+    'max': ['Max', '最大', '最大值'],
+    'raw': ['Raw', '原始', '原始數據'],
+  };
+
   @override
   Widget build(BuildContext context) {
+    final header = Row(
+      children: [
+        Expanded(
+          child: Text(title,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ),
+        if (mode != null && onModeChanged != null) _modeSelector(context),
+      ],
+    );
     return MCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          header,
           const SizedBox(height: 10),
           loading
               ? const SizedBox(height: 160, child: Center(child: Skeleton(width: double.infinity, height: 140, radius: 8)))
@@ -806,7 +902,7 @@ class _ChartCard extends StatelessWidget {
                   height: 160,
                   child: data == null
                       ? EmptyState(
-                          text: t(context, 'No data yet', '暂无数据'),
+                          text: t(context, 'No data yet', '暂无数据', zhHk: '暫無數據'),
                           icon: Icons.show_chart,
                         )
                       : LineChart(data!),
@@ -815,6 +911,39 @@ class _ChartCard extends StatelessWidget {
             const SizedBox(height: 8),
             Wrap(spacing: 12, runSpacing: 4, children: legend),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _modeSelector(BuildContext context) {
+    final current = _modeLabels.containsKey(mode) ? mode! : 'avg';
+    return PopupMenuButton<String>(
+      initialValue: current,
+      tooltip: t(context, 'Aggregation', '聚合方式', zhHk: '匯總方式'),
+      padding: EdgeInsets.zero,
+      onSelected: onModeChanged,
+      itemBuilder: (context) => [
+        for (final entry in _modeLabels.entries)
+          PopupMenuItem(
+            value: entry.key,
+            height: 38,
+            child: Text(t(context, entry.value[0], entry.value[1], zhHk: entry.value[2]),
+                style: const TextStyle(fontSize: 13)),
+          ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            t(context, _modeLabels[current]![0], _modeLabels[current]![1],
+                zhHk: _modeLabels[current]![2]),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const Icon(Icons.arrow_drop_down, size: 18),
         ],
       ),
     );

@@ -40,10 +40,11 @@ class SeriesData {
 }
 
 /// Evenly chunks the samples into at most [buckets] groups and aggregates each
-/// group into a single point: `avg` -> mean, `max` -> peak, `raw` -> last.
+/// group into a single point: `avg` -> mean, `max` -> peak. `raw` keeps every
+/// sample un-bucketed (web parity: raw draws the full data without windowing).
 SeriesData downsampleSeries(SeriesData d, int buckets, String mode) {
   final n = d.xs.length;
-  if (buckets <= 0 || n <= buckets) return d;
+  if (mode == 'raw' || buckets <= 0 || n <= buckets) return d;
   final xs = <double>[];
   final cols = List.generate(d.columns.length, (_) => <double?>[]);
   for (var b = 0; b < buckets; b++) {
@@ -142,6 +143,8 @@ LineChartData buildTimeChart(
   String minMaxMode = '0-auto',
   double? fixedMinY,
   double? fixedMaxY,
+  double? fixedMinX,
+  double? fixedMaxX,
   required String Function(double) yFormat,
   required String Function(double) xFormat,
   double? xInterval,
@@ -173,11 +176,15 @@ LineChartData buildTimeChart(
   final minY = fixedMinY ?? (minMaxMode == 'min-auto' ? null : 0.0);
   final maxY =
       fixedMaxY ?? (minMaxMode == '0-max' ? (dataMax <= 0 ? 1.0 : dataMax) : null);
-  final span = data.xs.last - data.xs.first;
+  // Fixed time window (web: [now - windowLength, now]) keeps the axis from
+  // collapsing onto the data when samples are sparse.
+  final minX = fixedMinX ?? data.xs.first;
+  final maxX = fixedMaxX ?? data.xs.last;
+  final span = maxX - minX;
 
   return LineChartData(
-    minX: data.xs.first,
-    maxX: data.xs.last,
+    minX: minX,
+    maxX: maxX,
     minY: minY,
     maxY: maxY,
     lineBarsData: [
