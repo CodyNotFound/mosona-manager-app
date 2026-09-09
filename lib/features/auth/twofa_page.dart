@@ -106,7 +106,8 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
     try {
       await ref.read(apiProvider).twoFaSendCode(_sendMode);
       if (!mounted) return;
-      toastSuccess(context, t(context, 'Verification code sent', '验证码已发送'));
+      toastSuccess(context,
+          t(context, 'Verification code sent', '验证码已发送', zhHk: '驗證碼已傳送'));
       _startCooldown(60);
     } catch (e) {
       if (mounted) showApiError(context, e);
@@ -169,12 +170,12 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(t(context, 'Two-Factor Verification', '两步验证')),
+        title: Text(t(context, 'Two-Factor Verification', '两步验证', zhHk: '雙重驗證')),
         automaticallyImplyLeading: false,
         actions: [
           TextButton(
             onPressed: () => context.go('/auth'),
-            child: Text(t(context, 'Back to sign in', '返回登录')),
+            child: Text(t(context, 'Back to sign in', '返回登录', zhHk: '返回登入')),
           ),
         ],
       ),
@@ -207,12 +208,13 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             EmptyState(
-              text: t(context, 'Failed to load verification status', '获取验证状态失败'),
+              text: t(context, 'Failed to load verification status', '获取验证状态失败',
+                  zhHk: '載入驗證狀態失敗'),
               icon: Icons.cloud_off_outlined,
             ),
             FilledButton.tonal(
               onPressed: _load,
-              child: Text(t(context, 'Retry', '重试')),
+              child: Text(t(context, 'Retry', '重试', zhHk: '重試')),
             ),
           ],
         ),
@@ -241,8 +243,10 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
           Text(
             _totpMode
                 ? t(context, 'Enter the 6-digit code from your authenticator app',
-                    '请输入验证器 App 中的 6 位代码')
-                : t(context, 'We sent a 6-digit code to your email', '验证码已发送至您的邮箱'),
+                    '请输入验证器 App 中的 6 位代码',
+                    zhHk: '請輸入驗證器應用程式中的 6 位驗證碼')
+                : t(context, 'We sent a 6-digit code to your email', '验证码已发送至您的邮箱',
+                    zhHk: '驗證碼已傳送至你的電郵'),
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -276,8 +280,10 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.refresh, size: 16),
                 label: Text(_cooldown > 0
-                    ? t(context, 'Resend (${_cooldown}s)', '重新发送 (${_cooldown}s)')
-                    : t(context, 'Resend code', '重新发送验证码')),
+                    ? t(context, 'Resend (${_cooldown}s)', '重新发送 (${_cooldown}s)',
+                        zhHk: '重新傳送 (${_cooldown}s)')
+                    : t(context, 'Resend code', '重新发送验证码',
+                        zhHk: '重新傳送驗證碼')),
               ),
             ),
           ],

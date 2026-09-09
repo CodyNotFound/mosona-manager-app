@@ -29,7 +29,8 @@ class _InitPageState extends ConsumerState<InitPage> {
   bool? _initialized; // null = probing, true = done, false = wizard
   int _step = 0;
   bool _submitting = false;
-  bool _registration = true;
+  // Web parity (init/index.tsx:53): registration stays OFF by default.
+  bool _registration = false;
   bool _obscure = true;
   String? _formError;
 
@@ -77,22 +78,25 @@ class _InitPageState extends ConsumerState<InitPage> {
     final password = _passwordCtrl.text;
     if (username.isEmpty) {
       setState(() =>
-          _formError = t(context, 'Username is required', '请填写用户名'));
+          _formError = t(context, 'Username is required', '请填写用户名',
+              zhHk: '請填寫用戶名稱'));
       return;
     }
     if (!email.contains('@') || !email.contains('.')) {
       setState(() =>
-          _formError = t(context, 'Enter a valid email address', '请输入有效的邮箱地址'));
+          _formError = t(context, 'Enter a valid email address', '请输入有效的邮箱地址',
+              zhHk: '請輸入有效的電郵地址'));
       return;
     }
     if (!_pwdStrong(password)) {
       setState(() => _formError =
-          t(context, 'Password does not meet the checklist below', '密码未满足下方清单要求'));
+          t(context, 'Password does not meet the checklist below', '密码未满足下方清单要求',
+              zhHk: '密碼未符合下方清單要求'));
       return;
     }
     if (password != _confirmCtrl.text) {
       setState(() =>
-          _formError = t(context, 'Passwords do not match', '两次输入的密码不一致'));
+          _formError = t(context, 'Passwords do not match', '两次输入的密码不一致', zhHk: '兩次輸入的密碼不一致'));
       return;
     }
     setState(() {
@@ -108,7 +112,8 @@ class _InitPageState extends ConsumerState<InitPage> {
     }
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       setState(() => _formError = t(
-          context, 'Website URL must start with http:// or https://', '站点地址必须以 http:// 或 https:// 开头'));
+          context, 'Website URL must start with http:// or https://', '站点地址必须以 http:// 或 https:// 开头',
+          zhHk: '網站 URL 必須以 http:// 或 https:// 開頭'));
       return;
     }
     setState(() {
@@ -149,7 +154,7 @@ class _InitPageState extends ConsumerState<InitPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(t(context, 'Setup', '初始化安装')),
+        title: Text(t(context, 'Setup', '初始化安装', zhHk: '初始化安裝')),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(child: _body()),
@@ -174,14 +179,15 @@ class _InitPageState extends ConsumerState<InitPage> {
         const Icon(Icons.check_circle, size: 72, color: MColors.online),
         const SizedBox(height: 16),
         Text(
-          t(context, 'Installation complete', '安装完成'),
+          t(context, 'Installation complete', '安装完成', zhHk: '安裝完成'),
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         Text(
           t(context, 'Your Mosona Manager instance is ready to use.',
-              'Mosona Manager 实例已就绪，可以开始使用了。'),
+              'Mosona Manager 实例已就绪，可以开始使用了。',
+              zhHk: 'Mosona Manager 實例已就緒，可以開始使用了。'),
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 13, color: muted),
         ),
@@ -189,14 +195,14 @@ class _InitPageState extends ConsumerState<InitPage> {
         SizedBox(
           width: double.infinity,
           child: LoadingButton(
-            label: t(context, 'Go Dashboard', '进入控制台'),
+            label: t(context, 'Go Dashboard', '进入控制台', zhHk: '前往總覽'),
             onPressed: () => context.go('/'),
           ),
         ),
         const SizedBox(height: 10),
         OutlinedButton(
           onPressed: () => context.push('/admin'),
-          child: Text(t(context, 'Go Admin', '进入管理后台')),
+          child: Text(t(context, 'Go Admin', '进入管理后台', zhHk: '前往管理後台')),
         ),
       ],
     );
@@ -257,7 +263,8 @@ class _InitPageState extends ConsumerState<InitPage> {
                   child: Text(
                     t(context,
                         'This creates the administrator account for this instance. It can only be done once.',
-                        '将创建本实例的管理员账号，此操作仅可执行一次。'),
+                        '将创建本实例的管理员账号，此操作仅可执行一次。',
+                        zhHk: '將建立本實例的管理員帳戶，此操作僅可執行一次。'),
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
@@ -267,7 +274,8 @@ class _InitPageState extends ConsumerState<InitPage> {
           const SizedBox(height: 14),
           TextField(
             controller: _usernameCtrl,
-            decoration: InputDecoration(labelText: t(context, 'Username', '用户名')),
+            decoration: InputDecoration(
+                labelText: t(context, 'Username', '用户名', zhHk: '用戶名稱')),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 10),
@@ -275,7 +283,7 @@ class _InitPageState extends ConsumerState<InitPage> {
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.email],
-            decoration: InputDecoration(labelText: t(context, 'Email', '邮箱')),
+            decoration: InputDecoration(labelText: t(context, 'Email', '邮箱', zhHk: '電郵')),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 10),
@@ -284,7 +292,7 @@ class _InitPageState extends ConsumerState<InitPage> {
             obscureText: _obscure,
             autofillHints: const [AutofillHints.newPassword],
             decoration: InputDecoration(
-              labelText: t(context, 'Password', '密码'),
+              labelText: t(context, 'Password', '密码', zhHk: '密碼'),
               suffixIcon: IconButton(
                 icon: Icon(_obscure
                     ? Icons.visibility_off_outlined
@@ -301,10 +309,10 @@ class _InitPageState extends ConsumerState<InitPage> {
             controller: _confirmCtrl,
             obscureText: _obscure,
             decoration: InputDecoration(
-              labelText: t(context, 'Confirm password', '确认密码'),
+              labelText: t(context, 'Confirm password', '确认密码', zhHk: '確認密碼'),
               errorText: _confirmCtrl.text.isNotEmpty &&
                       _confirmCtrl.text != _passwordCtrl.text
-                  ? t(context, 'Passwords do not match', '两次输入的密码不一致')
+                  ? t(context, 'Passwords do not match', '两次输入的密码不一致', zhHk: '兩次輸入的密碼不一致')
                   : null,
             ),
             onChanged: (_) => setState(() {}),
@@ -318,7 +326,7 @@ class _InitPageState extends ConsumerState<InitPage> {
           ],
           const SizedBox(height: 16),
           LoadingButton(
-            label: t(context, 'Next', '下一步'),
+            label: t(context, 'Next', '下一步', zhHk: '下一步'),
             onPressed: _nextFromStep1,
           ),
         ],
@@ -338,7 +346,7 @@ class _InitPageState extends ConsumerState<InitPage> {
             keyboardType: TextInputType.url,
             autofillHints: const [AutofillHints.url],
             decoration: InputDecoration(
-              labelText: t(context, 'Website URL', '站点地址'),
+              labelText: t(context, 'Website URL', '站点地址', zhHk: '網站 URL'),
               hintText: 'https://manager.example.com',
             ),
             onChanged: (_) {
@@ -348,7 +356,8 @@ class _InitPageState extends ConsumerState<InitPage> {
           const SizedBox(height: 4),
           Text(
             t(context, 'Public base URL of this instance, no trailing slash.',
-                '实例的公开访问地址，不带末尾斜杠。'),
+                '实例的公开访问地址，不带末尾斜杠。',
+                zhHk: '實例的公開存取地址，不以斜線（/）結尾。'),
             style: TextStyle(fontSize: 11, color: muted),
           ),
           const SizedBox(height: 8),
@@ -356,7 +365,7 @@ class _InitPageState extends ConsumerState<InitPage> {
             contentPadding: EdgeInsets.zero,
             value: _registration,
             onChanged: (v) => setState(() => _registration = v),
-            title: Text(t(context, 'Enable registration', '开放注册'),
+            title: Text(t(context, 'Enable registration', '开放注册', zhHk: '啟用用戶註冊'),
                 style: const TextStyle(fontSize: 14)),
           ),
           Container(
@@ -374,7 +383,8 @@ class _InitPageState extends ConsumerState<InitPage> {
                   child: Text(
                     t(context,
                         'Public registration is subject to local laws and regulations; enabling it is at your own risk.',
-                        '公开注册需遵守当地法律法规，开启风险自担。'),
+                        '公开注册需遵守当地法律法规，开启风险自担。',
+                        zhHk: '公開註冊須遵守當地法律法規，開啟風險自負。'),
                     style: const TextStyle(fontSize: 11),
                   ),
                 ),
@@ -395,13 +405,13 @@ class _InitPageState extends ConsumerState<InitPage> {
                 child: OutlinedButton(
                   onPressed:
                       _submitting ? null : () => setState(() => _step = 0),
-                  child: Text(t(context, 'Back', '上一步')),
+                  child: Text(t(context, 'Back', '上一步', zhHk: '上一步')),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: LoadingButton(
-                  label: t(context, 'Finish', '完成'),
+                  label: t(context, 'Finish', '完成', zhHk: '完成'),
                   loading: _submitting,
                   onPressed: _finish,
                 ),
@@ -432,22 +442,23 @@ class _PwdChecklist extends StatelessWidget {
   Widget build(BuildContext context) {
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     final checks = <(bool, String)>[
-      (password.length >= 8, t(context, 'At least 8 characters', '至少 8 个字符')),
+      (password.length >= 8,
+          t(context, 'At least 8 characters', '至少 8 个字符', zhHk: '至少 8 個字元')),
       (
         RegExp(r'[A-Z]').hasMatch(password),
-        t(context, 'Contains an uppercase letter', '包含大写字母')
+        t(context, 'Contains an uppercase letter', '包含大写字母', zhHk: '包含大寫字母')
       ),
       (
         RegExp(r'[a-z]').hasMatch(password),
-        t(context, 'Contains a lowercase letter', '包含小写字母')
+        t(context, 'Contains a lowercase letter', '包含小写字母', zhHk: '包含小寫字母')
       ),
       (
         RegExp(r'[0-9]').hasMatch(password),
-        t(context, 'Contains a digit', '包含数字')
+        t(context, 'Contains a digit', '包含数字', zhHk: '包含數字')
       ),
       (
         RegExp(r'[^A-Za-z0-9]').hasMatch(password),
-        t(context, 'Contains a special character', '包含特殊字符')
+        t(context, 'Contains a special character', '包含特殊字符', zhHk: '包含特殊字元')
       ),
     ];
     return Column(

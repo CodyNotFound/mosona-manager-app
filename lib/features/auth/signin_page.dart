@@ -101,7 +101,8 @@ class _SignInPageState extends ConsumerState<SignInPage> {
     final url = _serverCtrl.text.trim();
     if (!_validBaseUrl(url)) {
       setState(() => _serverError =
-          t(context, 'Must start with http:// or https://', '必须以 http:// 或 https:// 开头'));
+          t(context, 'Must start with http:// or https://', '必须以 http:// 或 https:// 开头',
+              zhHk: '必須以 http:// 或 https:// 開頭'));
       return;
     }
     setState(() {
@@ -119,13 +120,15 @@ class _SignInPageState extends ConsumerState<SignInPage> {
 
   Future<void> _submitLogin() async {
     if (ref.read(serverConfigProvider).isEmpty) {
-      toastWarn(context, t(context, 'Configure the server address first', '请先配置服务器地址'));
+      toastWarn(context, t(context, 'Configure the server address first', '请先配置服务器地址',
+          zhHk: '請先設定伺服器地址'));
       return;
     }
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
     if (email.isEmpty || password.isEmpty) {
-      toastWarn(context, t(context, 'Please fill in email and password', '请填写邮箱和密码'));
+      toastWarn(context, t(context, 'Please fill in email and password', '请填写邮箱和密码',
+          zhHk: '請填寫電郵和密碼'));
       return;
     }
     setState(() => _submitting = true);
@@ -152,22 +155,26 @@ class _SignInPageState extends ConsumerState<SignInPage> {
 
   Future<void> _submitRegister() async {
     if (ref.read(serverConfigProvider).isEmpty) {
-      toastWarn(context, t(context, 'Configure the server address first', '请先配置服务器地址'));
+      toastWarn(context, t(context, 'Configure the server address first', '请先配置服务器地址',
+          zhHk: '請先設定伺服器地址'));
       return;
     }
     final username = _regUserCtrl.text.trim();
     final email = _regEmailCtrl.text.trim();
     final password = _regPwdCtrl.text;
     if (username.isEmpty || email.isEmpty) {
-      toastWarn(context, t(context, 'Please fill in all fields', '请填写所有字段'));
+      toastWarn(context, t(context, 'Please fill in all fields', '请填写所有字段',
+          zhHk: '請填妥所有欄位'));
       return;
     }
     if (!_pwdChecks(context, password).every((c) => c.$1)) {
-      toastWarn(context, t(context, 'Password does not meet the requirements', '密码未满足下方要求'));
+      toastWarn(context,
+          t(context, 'Password does not meet the requirements', '密码未满足下方要求',
+              zhHk: '密碼未符合下方要求'));
       return;
     }
     if (password != _regConfirmCtrl.text) {
-      toastWarn(context, t(context, 'Passwords do not match', '两次输入的密码不一致'));
+      toastWarn(context, t(context, 'Passwords do not match', '两次输入的密码不一致', zhHk: '兩次輸入的密碼不一致'));
       return;
     }
     setState(() => _submitting = true);
@@ -175,7 +182,8 @@ class _SignInPageState extends ConsumerState<SignInPage> {
       // Captcha-protected registration is web-only: send empty token.
       await ref.read(apiProvider).register(username, email, password);
       if (!mounted) return;
-      toastSuccess(context, t(context, 'Account created, please sign in', '注册成功，请登录'));
+      toastSuccess(context, t(context, 'Account created, please sign in', '注册成功，请登录',
+          zhHk: '帳戶建立成功，請登入'));
       setState(() {
         _loginMode = true;
         _emailCtrl.text = email;
@@ -187,14 +195,13 @@ class _SignInPageState extends ConsumerState<SignInPage> {
     }
   }
 
-  Future<void> _oauthLogin(AuthProvider p) async {
-    try {
-      final r = await ref.read(apiProvider).oauthLogin(p.id);
-      await launchExternal(r.url);
-    } catch (e) {
-      if (mounted) showApiError(context, e);
-    }
-  }
+  /// 🔵 Mobile limitation badge (web parity features that cannot be
+  /// completed on a phone: Turnstile widget, OAuth callback loop, ...).
+  Widget _limitedBadge() => MBadge(
+        color: MColors.warning,
+        small: true,
+        child: Text(t(context, '🔵 Limited', '🔵 受限', zhHk: '🔵 受限')),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -213,6 +220,31 @@ class _SignInPageState extends ConsumerState<SignInPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Language / theme switcher (web parity for the pre-login
+                  // screen; matches the app shell buttons).
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        tooltip: t(context, 'Language', '语言', zhHk: '語言'),
+                        onPressed: () =>
+                            ref.read(localeControllerProvider.notifier).toggle(),
+                        icon: Text(
+                          ref.watch(localeControllerProvider) == 'en' ? 'EN' : '中',
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: t(context, 'Theme', '主题', zhHk: '主題'),
+                        onPressed: () =>
+                            ref.read(themeControllerProvider.notifier).toggle(),
+                        icon: Icon(Theme.of(context).brightness == Brightness.dark
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined),
+                      ),
+                    ],
+                  ),
                   FadeSlideIn(child: _serverCard()),
                   const SizedBox(height: 24),
                   FadeSlideIn(
@@ -247,7 +279,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
             children: [
               Icon(Icons.dns_outlined, size: 15, color: muted),
               const SizedBox(width: 6),
-              Text(t(context, 'Server address', '服务器地址'),
+              Text(t(context, 'Server address', '服务器地址', zhHk: '伺服器地址'),
                   style: TextStyle(fontSize: 12, color: muted)),
               const Spacer(),
               if (_probing)
@@ -281,7 +313,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: LoadingButton(
-                  label: t(context, 'Save', '保存'),
+                  label: t(context, 'Save', '保存', zhHk: '儲存'),
                   loading: _savingUrl,
                   onPressed: _saveServerUrl,
                 ),
@@ -316,9 +348,28 @@ class _SignInPageState extends ConsumerState<SignInPage> {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
         Text(
-          t(context, 'Server monitor & terminal management', '服务器监控与终端管理'),
+          t(context, 'Server monitor & terminal management', '服务器监控与终端管理',
+              zhHk: '伺服器監察與終端機管理'),
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 13, color: muted),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _limitedBadge(),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                t(context,
+                    'Default app branding — the instance custom site title applies on the web client.',
+                    '显示 App 默认品牌，实例自定义站点标题仅在网页端生效。',
+                    zhHk: '顯示 App 預設品牌，實例自訂網站標題僅在網頁端生效。'),
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: muted),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -336,8 +387,10 @@ class _SignInPageState extends ConsumerState<SignInPage> {
             child: TextButton(
               onPressed: () => setState(() => _loginMode = !_loginMode),
               child: Text(_loginMode
-                  ? t(context, 'No account? Create one', '没有账号？去注册')
-                  : t(context, 'Already have an account? Sign in', '已有账号？去登录')),
+                  ? t(context, 'No account? Create one', '没有账号？去注册',
+                      zhHk: '還沒有帳戶？去註冊')
+                  : t(context, 'Already have an account? Sign in', '已有账号？去登录',
+                      zhHk: '已有帳戶？去登入')),
             ),
           ),
         ],
@@ -351,7 +404,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
         controller: _emailCtrl,
         keyboardType: TextInputType.emailAddress,
         autofillHints: const [AutofillHints.email],
-        decoration: InputDecoration(labelText: t(context, 'Email', '邮箱')),
+        decoration: InputDecoration(labelText: t(context, 'Email', '邮箱', zhHk: '電郵')),
         onChanged: (_) => setState(() {}),
       ),
       const SizedBox(height: 10),
@@ -360,7 +413,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
         obscureText: _obscure,
         autofillHints: const [AutofillHints.password],
         decoration: InputDecoration(
-          labelText: t(context, 'Password', '密码'),
+          labelText: t(context, 'Password', '密码', zhHk: '密碼'),
           suffixIcon: IconButton(
             icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
             onPressed: () => setState(() => _obscure = !_obscure),
@@ -377,7 +430,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
           ),
           GestureDetector(
             onTap: () => setState(() => _rememberMe = !_rememberMe),
-            child: Text(t(context, 'Remember me', '记住我')),
+            child: Text(t(context, 'Remember me', '记住我', zhHk: '記住我')),
           ),
         ],
       ),
@@ -385,7 +438,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
       SizedBox(
         width: double.infinity,
         child: LoadingButton(
-          label: t(context, 'Sign in', '登录'),
+          label: t(context, 'Sign in', '登录', zhHk: '登入'),
           loading: _submitting,
           onPressed: _submitLogin,
         ),
@@ -398,7 +451,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
     return [
       TextField(
         controller: _regUserCtrl,
-        decoration: InputDecoration(labelText: t(context, 'Username', '用户名')),
+        decoration: InputDecoration(labelText: t(context, 'Username', '用户名', zhHk: '用戶名稱')),
         onChanged: (_) => setState(() {}),
       ),
       const SizedBox(height: 10),
@@ -406,7 +459,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
         controller: _regEmailCtrl,
         keyboardType: TextInputType.emailAddress,
         autofillHints: const [AutofillHints.email],
-        decoration: InputDecoration(labelText: t(context, 'Email', '邮箱')),
+        decoration: InputDecoration(labelText: t(context, 'Email', '邮箱', zhHk: '電郵')),
         onChanged: (_) => setState(() {}),
       ),
       const SizedBox(height: 10),
@@ -415,7 +468,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
         obscureText: _regObscure,
         autofillHints: const [AutofillHints.newPassword],
         decoration: InputDecoration(
-          labelText: t(context, 'Password', '密码'),
+          labelText: t(context, 'Password', '密码', zhHk: '密碼'),
           suffixIcon: IconButton(
             icon:
                 Icon(_regObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
@@ -431,9 +484,9 @@ class _SignInPageState extends ConsumerState<SignInPage> {
         controller: _regConfirmCtrl,
         obscureText: _regObscure,
         decoration: InputDecoration(
-          labelText: t(context, 'Confirm password', '确认密码'),
+          labelText: t(context, 'Confirm password', '确认密码', zhHk: '確認密碼'),
           errorText: _regConfirmCtrl.text.isNotEmpty && _regConfirmCtrl.text != _regPwdCtrl.text
-              ? t(context, 'Passwords do not match', '两次输入的密码不一致')
+              ? t(context, 'Passwords do not match', '两次输入的密码不一致', zhHk: '兩次輸入的密碼不一致')
               : null,
         ),
         onChanged: (_) => setState(() {}),
@@ -446,18 +499,24 @@ class _SignInPageState extends ConsumerState<SignInPage> {
             color: Theme.of(context).colorScheme.secondary,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.info_outline,
-                  size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  t(context, 'Captcha-protected registration is web-only',
-                      '注册验证码仅支持网页端'),
-                  style: const TextStyle(fontSize: 12),
-                ),
+              Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  _limitedBadge(),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                t(context,
+                    'This instance requires a captcha for registration, which the app cannot render. Please register on the web client.',
+                    '本实例已开启注册人机验证（Captcha），App 无法渲染验证组件，请在网页端完成注册。',
+                    zhHk: '本實例已啟用註冊人機驗證（Captcha），App 無法渲染驗證元件，請在網頁端完成註冊。'),
+                style: const TextStyle(fontSize: 12),
               ),
             ],
           ),
@@ -467,9 +526,11 @@ class _SignInPageState extends ConsumerState<SignInPage> {
       SizedBox(
         width: double.infinity,
         child: LoadingButton(
-          label: t(context, 'Create account', '注册账号'),
+          label: t(context, 'Create account', '注册账号', zhHk: '建立帳戶'),
           loading: _submitting,
-          onPressed: _submitRegister,
+          // Turnstile cannot be rendered natively: block submission on
+          // captcha-enabled instances instead of sending an empty token.
+          onPressed: captcha.isEmpty ? _submitRegister : null,
         ),
       ),
     ];
@@ -481,7 +542,8 @@ class _SignInPageState extends ConsumerState<SignInPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Center(
-          child: Text(t(context, 'Or continue with', '或使用以下方式登录'),
+          child: Text(t(context, 'Or continue with', '或使用以下方式登录',
+                  zhHk: '或使用以下方式登入'),
               style: TextStyle(fontSize: 12, color: muted)),
         ),
         const SizedBox(height: 10),
@@ -489,22 +551,30 @@ class _SignInPageState extends ConsumerState<SignInPage> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: FilledButton.tonal(
-              onPressed: _submitting ? null : () => _oauthLogin(p),
+              // 🔵 Honest mobile limitation: there is no deep-link callback
+              // channel, so the OAuth round-trip can never return to the app.
+              // Buttons stay disabled instead of pretending it works.
+              onPressed: null,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _providerIcon(p),
                   const SizedBox(width: 8),
-                  Text(t(context, 'Continue with ${p.name}', '使用 ${p.name} 登录')),
+                  Text(t(context, 'Continue with ${p.name}', '使用 ${p.name} 登录',
+                      zhHk: '使用 ${p.name} 登入')),
                 ],
               ),
             ),
           ),
         const SizedBox(height: 2),
+        Center(child: _limitedBadge()),
+        const SizedBox(height: 6),
         Center(
           child: Text(
-            t(context, 'OAuth callback is completed on the web client for now.',
-                'OAuth 回调暂由网页端完成。'),
+            t(context,
+                'The OAuth callback cannot return to the app yet. Sign in with email and password, or use the web client for third-party login.',
+                'OAuth 授权回调暂无法返回 App。请使用邮箱密码登录，或在网页端完成第三方登录。',
+                zhHk: 'OAuth 授權回調暫無法返回 App。請使用電郵密碼登入，或在網頁端完成第三方登入。'),
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, color: muted),
           ),
@@ -532,13 +602,15 @@ class _SignInPageState extends ConsumerState<SignInPage> {
 /// Live password strength checklist (web parity): >=8 chars, upper, lower,
 /// digit, special.
 List<(bool, String)> _pwdChecks(BuildContext context, String p) => [
-      (p.length >= 8, t(context, 'At least 8 characters', '至少 8 个字符')),
-      (RegExp(r'[A-Z]').hasMatch(p), t(context, 'Contains an uppercase letter', '包含大写字母')),
-      (RegExp(r'[a-z]').hasMatch(p), t(context, 'Contains a lowercase letter', '包含小写字母')),
-      (RegExp(r'[0-9]').hasMatch(p), t(context, 'Contains a digit', '包含数字')),
+      (p.length >= 8, t(context, 'At least 8 characters', '至少 8 个字符', zhHk: '至少 8 個字元')),
+      (RegExp(r'[A-Z]').hasMatch(p),
+          t(context, 'Contains an uppercase letter', '包含大写字母', zhHk: '包含大寫字母')),
+      (RegExp(r'[a-z]').hasMatch(p),
+          t(context, 'Contains a lowercase letter', '包含小写字母', zhHk: '包含小寫字母')),
+      (RegExp(r'[0-9]').hasMatch(p), t(context, 'Contains a digit', '包含数字', zhHk: '包含數字')),
       (
         RegExp(r'[^A-Za-z0-9]').hasMatch(p),
-        t(context, 'Contains a special character', '包含特殊字符')
+        t(context, 'Contains a special character', '包含特殊字符', zhHk: '包含特殊字元')
       ),
     ];
 
