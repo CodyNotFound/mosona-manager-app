@@ -417,7 +417,7 @@ class ApiServices {
   // ---------------------------------------------------------------- alerts
 
   Future<AlertsData> alertsList() =>
-      _ok(c.request('GET', '/api/v1/server/alert'), AlertsData.fromJson);
+      _ok(c.request('GET', '/api/v1/alert'), AlertsData.fromJson);
 
   Future<void> alertSet(int serverId, String item, int threshold, int forDuration,
           {bool override = false}) =>
