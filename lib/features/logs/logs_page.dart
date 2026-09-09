@@ -49,6 +49,7 @@ class _LogsPageState extends ConsumerState<LogsPage> {
   String _nextCursor = '';
   bool _hasMore = false;
   bool _loading = true;
+  bool _firstLoadError = false;
 
   bool get _messageActive => _messageCtrl.text.trim().isNotEmpty;
 
@@ -97,12 +98,14 @@ class _LogsPageState extends ConsumerState<LogsPage> {
         _nextCursor = page.nextCursor;
         _hasMore = page.hasMore;
         _loading = false;
+        _firstLoadError = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _logs ??= const [];
         _loading = false;
+        _firstLoadError = _logs == null || _logs!.isEmpty;
       });
       showApiError(context, e);
     }
@@ -156,6 +159,7 @@ class _LogsPageState extends ConsumerState<LogsPage> {
     if (limit == null || !mounted) return;
 
     final navigator = Navigator.of(context);
+    var dialogOpen = true;
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -211,6 +215,7 @@ class _LogsPageState extends ConsumerState<LogsPage> {
       final fileName =
           '${widget.admin ? 'admin-' : ''}logs-export-${DateFormat('yyyy-MM-dd').format(end)}.json';
       navigator.pop();
+      dialogOpen = false;
       // Land the export as a real .json file (web downloads
       // logs-export-YYYY-MM-DD.json); the share sheet receives the file.
       final file = File(
@@ -224,7 +229,7 @@ class _LogsPageState extends ConsumerState<LogsPage> {
         await file.delete();
       } catch (_) {}
     } catch (e) {
-      navigator.pop();
+      if (dialogOpen) navigator.pop();
       if (mounted) showApiError(context, e);
     }
   }
@@ -301,11 +306,17 @@ class _LogsPageState extends ConsumerState<LogsPage> {
                 ),
               )
             else if (logs.isEmpty)
-              EmptyState(
-                text: t(context, 'No logs match the current filters.',
-                    '没有符合当前筛选条件的日志。'),
-                icon: Icons.receipt_long_outlined,
-              )
+              _firstLoadError
+                  ? EmptyState(
+                      text: t(context, 'Failed to load logs.',
+                          '日志加载失败。'),
+                      icon: Icons.cloud_off_outlined,
+                    )
+                  : EmptyState(
+                      text: t(context, 'No logs match the current filters.',
+                          '没有符合当前筛选条件的日志。'),
+                      icon: Icons.receipt_long_outlined,
+                    )
             else
               ...List.generate(
                 logs.length,

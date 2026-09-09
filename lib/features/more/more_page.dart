@@ -6,7 +6,7 @@ import 'package:mosona_manager/core/theme/mcolors.dart';
 import 'package:mosona_manager/core/widgets/widgets.dart';
 import '../../core/terminal/terminal.dart'
     show TerminalPhase, TerminalSession;
-import '../terminal/terminal_page.dart' show terminalManagerProvider;
+import '../../core/terminal/terminal.dart' show terminalManagerProvider;
 
 /// "More" tab: the mobile nav hub replacing the web sidebar groups —
 /// account/team card plus open terminal sessions, Security / Manage / Other

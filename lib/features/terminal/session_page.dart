@@ -8,7 +8,6 @@ import 'package:xterm/xterm.dart';
 import '../../core/terminal/terminal.dart';
 import '../../core/theme/mcolors.dart';
 import '../../core/widgets/widgets.dart';
-import 'terminal_page.dart';
 
 /// `/session/{id}` — full-screen black xterm view for one live session
 /// (web parity §3.7).

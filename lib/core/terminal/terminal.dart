@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:xterm/xterm.dart';
 
@@ -53,7 +54,10 @@ class TerminalSession extends ChangeNotifier {
           .decoder
           .startChunkedConversion(_TerminalStringSink(terminal.write));
 
+  bool _disposed = false;
+
   void _setPhase(TerminalPhase p) {
+    if (_disposed) return;
     phase = p;
     notifyListeners();
   }
@@ -72,6 +76,13 @@ class TerminalSession extends ChangeNotifier {
         },
       );
       await _ws!.ready;
+      // closed/disposed while the handshake was in flight: tear the channel
+      // back down instead of resuming into a disposed session
+      if (_manuallyClosed) {
+        _ws?.sink.close();
+        _ws = null;
+        return;
+      }
       _sub = _ws!.stream.listen(
         (data) {
           if (data is String) {
@@ -169,6 +180,7 @@ class TerminalSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     manualClose();
     super.dispose();
   }
@@ -195,8 +207,16 @@ class TerminalManager extends ChangeNotifier {
   void close(String id) {
     final s = _sessions.remove(id);
     s?.removeListener(notifyListeners);
-    s?.manualClose();
+    s?.dispose(); // manualClose inside; also stops reconnect timers
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    for (final id in _sessions.keys.toList()) {
+      close(id);
+    }
+    super.dispose();
   }
 
   /// First remaining session id after closing one, for auto-navigation.
@@ -219,3 +239,11 @@ class _TerminalStringSink extends StringConversionSinkBase {
   @override
   void close() {}
 }
+
+/// App-level terminal session registry. Defined in core so the session
+/// controller can invalidate it on logout (features re-export via import).
+final terminalManagerProvider = Provider<TerminalManager>((ref) {
+  final m = TerminalManager();
+  ref.onDispose(m.dispose);
+  return m;
+});

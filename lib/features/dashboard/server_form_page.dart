@@ -155,7 +155,8 @@ class _ServerFormPageState extends ConsumerState<ServerFormPage> {
         _endCtrl.text =
             _end == null ? '' : DateFormat('yyyy-MM-dd').format(_end!);
         _loading = false;
-        _retriedStateChange = false;
+        // note: _retriedStateChange stays as-is — a reload must not re-arm
+        // the one-shot optimistic-lock retry, or a persistent conflict loops
       });
     } catch (e) {
       if (!mounted) return;

@@ -12,11 +12,7 @@ import '../../core/utils/format.dart';
 import '../../core/widgets/widgets.dart';
 
 /// Shared terminal session registry (contract imported by other features).
-final terminalManagerProvider = Provider<TerminalManager>((ref) {
-  final m = TerminalManager();
-  ref.onDispose(m.dispose);
-  return m;
-});
+
 
 /// `/terminal` — terminal-enabled servers grouped by category, live sessions
 /// on top (web parity §3.6). Rendered inside the bottom-nav shell.

@@ -13,7 +13,7 @@ import '../../core/state/session.dart' show mutationBusProvider, teamDataProvide
 import '../../core/theme/mcolors.dart';
 import '../../core/utils/format.dart';
 import '../../core/widgets/widgets.dart';
-import '../terminal/terminal_page.dart' show terminalManagerProvider;
+import '../../core/terminal/terminal.dart' show terminalManagerProvider;
 
 /// Dashboard-only shared widgets: server card, server action menu,
 /// alerts bottom sheet and category management sheets.
@@ -257,8 +257,7 @@ class _ServerCardState extends ConsumerState<ServerCard> {
     }
     DateTime start;
     if (hasCycle) {
-      final months = cycle == 1 ? 1 : (cycle - 1) * 3;
-      start = end.subtract(Duration(days: 30 * months));
+      start = end.subtract(Duration(days: cycleDays(cycle)));
     } else {
       start = widget.server.startTime!;
     }

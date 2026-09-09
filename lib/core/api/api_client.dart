@@ -210,11 +210,15 @@ class ApiClient {
     );
   }
 
-  /// Plain-text GET (used by /api/ping).
+  /// Plain-text GET (used by /api/ping); a 5xx/404 body is an error, not pong.
   Future<String> getText(String path) async {
     try {
       final res = await _dio.get<String>(path,
           options: Options(responseType: ResponseType.plain));
+      if (res.statusCode != 200) {
+        throw ApiException('error', 'HTTP ${res.statusCode}',
+            httpStatus: res.statusCode);
+      }
       return res.data ?? '';
     } on DioException catch (e) {
       throw ApiException('network', e.message ?? 'Connection error');

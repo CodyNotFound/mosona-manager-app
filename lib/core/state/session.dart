@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_services.dart';
 import '../sse/sse_client.dart' show monitorProvider;
+import '../terminal/terminal.dart' show terminalManagerProvider;
 import '../models/models.dart';
 
 /// Global session state: current user, active team, all teams.
@@ -15,6 +16,7 @@ class SessionState {
     this.team,
     this.teams = const [],
     this.needsInit = false,
+    this.pending2fa = false,
   });
 
   final SessionStatus status;
@@ -22,6 +24,7 @@ class SessionState {
   final Team? team;
   final List<Team> teams;
   final bool needsInit;
+  final bool pending2fa;
 
   bool get isLoggedIn => status == SessionStatus.loggedIn && user != null;
   bool get hasTeam => team != null;
@@ -32,6 +35,7 @@ class SessionState {
     Team? team,
     List<Team>? teams,
     bool? needsInit,
+    bool? pending2fa,
     bool clearUser = false,
     bool clearTeam = false,
   }) =>
@@ -41,6 +45,7 @@ class SessionState {
         team: clearTeam ? null : (team ?? this.team),
         teams: teams ?? this.teams,
         needsInit: needsInit ?? this.needsInit,
+        pending2fa: pending2fa ?? this.pending2fa,
       );
 }
 
@@ -79,13 +84,25 @@ class SessionController extends Notifier<SessionState> {
         await _tryDemoLogin();
         return;
       }
+      if (e.code == '2fa_required') {
+        // half-logged-in session: send the user back to the 2FA step instead
+        // of silently dropping them to the password form
+        state = SessionState(status: SessionStatus.loggedOut, pending2fa: true);
+        return;
+      }
       // Server unreachable etc: stay logged out so user can fix the URL.
       state = SessionState(status: SessionStatus.loggedOut);
     }
   }
 
-  static const _demoEmail = String.fromEnvironment('MOSONA_DEMO_EMAIL');
-  static const _demoPass = String.fromEnvironment('MOSONA_DEMO_PASS');
+  // credentials must never ship inside a release binary, even if a CI job
+  // accidentally passes the defines (the URL fallback has the same guard)
+  static const _demoEmail = bool.fromEnvironment('dart.vm.product')
+      ? ''
+      : String.fromEnvironment('MOSONA_DEMO_EMAIL');
+  static const _demoPass = bool.fromEnvironment('dart.vm.product')
+      ? ''
+      : String.fromEnvironment('MOSONA_DEMO_PASS');
 
   Future<void> _tryDemoLogin() async {
     if (_demoEmail.isEmpty || _demoPass.isEmpty) {
@@ -117,6 +134,7 @@ class SessionController extends Notifier<SessionState> {
     // drop the app-level monitor subscription: its SSE would keep pointing
     // at the old hub / keep reconnecting with a dead cookie
     ref.invalidate(monitorProvider);
+    ref.invalidate(terminalManagerProvider);
     state = SessionState(status: SessionStatus.loggedOut);
   }
 
@@ -133,11 +151,17 @@ final sessionProvider =
 
 /// Team-scoped lookups (categories / keys / alerts) refreshed together.
 class TeamDataState {
-  const TeamDataState({this.categories = const [], this.keys = const [], this.loaded = false});
+  const TeamDataState({
+    this.categories = const [],
+    this.keys = const [],
+    this.loaded = false,
+    this.error = false,
+  });
 
   final List<Category> categories;
   final List<SshKey> keys;
   final bool loaded;
+  final bool error;
 }
 
 class TeamDataController extends Notifier<TeamDataState> {
@@ -150,17 +174,28 @@ class TeamDataController extends Notifier<TeamDataState> {
   }
 
   ApiServices get _api => ref.read(apiProvider);
+  int _generation = 0;
 
   Future<void> refresh() async {
+    final gen = ++_generation;
     try {
       final results = await Future.wait([_api.categoryList(), _api.keyList()]);
+      if (gen != _generation) return; // a newer refresh superseded this one
       state = TeamDataState(
         categories: results[0] as List<Category>,
         keys: results[1] as List<SshKey>,
         loaded: true,
       );
     } catch (_) {
-      state = TeamDataState(loaded: true);
+      if (gen != _generation) return;
+      // keep whatever data we already had — a transient error must not wipe
+      // the category/key lists the UI is rendering
+      state = TeamDataState(
+        categories: state.categories,
+        keys: state.keys,
+        loaded: true,
+        error: true,
+      );
     }
   }
 }

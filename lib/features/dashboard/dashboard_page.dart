@@ -177,29 +177,34 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
               ),
               if (snap == null)
-                _conn.value == MonitorConn.connecting
-                    ? SliverToBoxAdapter(
+                // wrap in a listener so a first-connection failure can leave
+                // the skeleton state (the value is read at build time only)
+                ListenableBuilder(
+                  listenable: _conn,
+                  builder: (context, _) => _conn.value == MonitorConn.connecting
+                      ? SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: _skeletonPage(cats, cfg.dashboardLayout),
                         ),
                       )
-                    : SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            EmptyState(
-                              text: t(context, 'Connection lost', '连接已断开'),
-                              icon: Icons.wifi_off_outlined,
-                            ),
-                            TextButton(
-                              onPressed: _refresh,
-                              child: Text(t(context, 'Retry', '重试')),
-                            ),
-                          ],
+                      : SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              EmptyState(
+                                text: t(context, 'Connection lost', '连接已断开'),
+                                icon: Icons.wifi_off_outlined,
+                              ),
+                              TextButton(
+                                onPressed: _refresh,
+                                child: Text(t(context, 'Retry', '重试')),
+                              ),
+                            ],
+                          ),
                         ),
-                      )
+                )
               else ...[
                 SliverToBoxAdapter(
                   child: Padding(
@@ -235,7 +240,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             ? (t(context, 'Lost', '断开'), MColors.offline)
             : v == MonitorConn.live
                 ? (t(context, 'Live', '实时'), MColors.online)
-                : (t(context, 'Snapshot', '快照'), MColors.warning);
+                : _conn.value == MonitorConn.connecting
+                    ? (t(context, 'Connecting', '连接中'), MColors.warning)
+                    : (t(context, 'Snapshot', '快照'), MColors.warning);
         return MBadge(
           small: true,
           color: color,

@@ -51,10 +51,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isPublic ? null : '/';
       }
       if (sess.needsInit) return path == '/init' ? null : '/init';
-      if (!sess.isLoggedIn) return isPublic ? null : '/auth';
+      if (!sess.isLoggedIn) {
+        if (sess.pending2fa) return path == '/2fa' ? null : '/2fa';
+        return isPublic ? null : '/auth';
+      }
       if (isPublic && path != '/2fa') return '/';
-      // admin section requires is_admin (web parity: non-admins are bounced)
-      if (path == '/admin' || path.startsWith('/admin/')) {
+      // admin section requires is_admin (web parity: non-admins are bounced);
+      // the logs route is shared, so the admin query flag is guarded too
+      if (path == '/admin' || path.startsWith('/admin/') ||
+          (path == '/logs' && state.uri.queryParameters['admin'] == '1')) {
         if (sess.user?.isAdmin != true) return '/';
       }
       if (!sess.hasTeam &&

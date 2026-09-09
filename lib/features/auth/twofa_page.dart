@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_client.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_services.dart';
@@ -74,6 +76,13 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
         await _sendCode();
       }
       if (mounted) setState(() => _loading = false);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      showApiError(context, e);
+      setState(() {
+        _loading = false;
+        _loadError = true;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
