@@ -4,9 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:mosona_manager/core/state/session.dart';
 import 'package:mosona_manager/core/theme/mcolors.dart';
 import 'package:mosona_manager/core/widgets/widgets.dart';
+import '../../core/terminal/terminal.dart'
+    show TerminalPhase, TerminalSession;
+import '../terminal/terminal_page.dart' show terminalManagerProvider;
 
 /// "More" tab: the mobile nav hub replacing the web sidebar groups —
-/// account/team card plus Security / Manage / Other sections.
+/// account/team card plus open terminal sessions, Security / Manage / Other
+/// sections.
 class MorePage extends ConsumerWidget {
   const MorePage({super.key});
 
@@ -14,6 +18,7 @@ class MorePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sess = ref.watch(sessionProvider);
     final theme = Theme.of(context);
+    final mgr = ref.watch(terminalManagerProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -26,6 +31,38 @@ class MorePage extends ConsumerWidget {
             ),
             FadeSlideIn(child: _userCard(context, ref, sess)),
             const SizedBox(height: 16),
+            // Open terminal sessions quick list (web sidebar parity).
+            ListenableBuilder(
+              listenable: mgr,
+              builder: (context, _) {
+                final sessions = mgr.list;
+                if (sessions.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label(theme, t(context, 'Open sessions', '打开的会话')),
+                    const SizedBox(height: 8),
+                    MCard(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < sessions.length; i++) ...[
+                            if (i > 0)
+                              Divider(
+                                  height: 1,
+                                  indent: 46,
+                                  color: theme.dividerColor),
+                            _sessionTile(context, ref, sessions[i]),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            ),
             _label(theme, t(context, 'Security', '安全')),
             const SizedBox(height: 8),
             FadeSlideIn(
@@ -80,6 +117,59 @@ class MorePage extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  // ------------------------------------------------------ terminal sessions
+
+  (String, Color) _phaseLabel(BuildContext context, TerminalPhase phase) => switch (phase) {
+        TerminalPhase.connected =>
+          (t(context, 'connected', '已连接'), MColors.online),
+        TerminalPhase.connecting =>
+          (t(context, 'connecting…', '连接中…'), MColors.warning),
+        TerminalPhase.reconnecting =>
+          (t(context, 'reconnecting…', '重连中…'), MColors.warning),
+        TerminalPhase.disconnected =>
+          (t(context, 'disconnected', '已断开'), MColors.offline),
+        TerminalPhase.revoked =>
+          (t(context, 'revoked', '已吊销'), MColors.offline),
+        TerminalPhase.failed =>
+          (t(context, 'failed', '失败'), MColors.offline),
+      };
+
+  Widget _sessionTile(BuildContext context, WidgetRef ref, TerminalSession session) {
+    final theme = Theme.of(context);
+    final (phaseLabel, phaseColor) = _phaseLabel(context, session.phase);
+    return ListTile(
+      dense: true,
+      leading: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          const Icon(Icons.terminal_outlined, size: 22),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: phaseColor,
+            ),
+          ),
+        ],
+      ),
+      title: Text(
+        session.server.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 14),
+      ),
+      subtitle: Text(phaseLabel, style: TextStyle(fontSize: 11, color: phaseColor)),
+      trailing: IconButton(
+        visualDensity: VisualDensity.compact,
+        tooltip: t(context, 'Close session', '关闭会话'),
+        icon: Icon(Icons.close, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        onPressed: () => ref.read(terminalManagerProvider).close(session.id),
+      ),
+      onTap: () => context.push('/session/${session.id}'),
     );
   }
 

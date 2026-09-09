@@ -102,8 +102,15 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                     _linkTile(
                       context,
                       Icons.dock,
-                      t(context, 'Docker deploy guide', 'Docker 部署指南'),
-                      'https://manager.mosona.cc/docs/manual-deploy',
+                      t(context, 'Docker (ghcr.io)', 'Docker (ghcr.io)'),
+                      'https://github.com/mosona-labs/mosona-manager/pkgs/container/mosona-manager',
+                    ),
+                    Divider(height: 1, indent: 16, color: theme.dividerColor),
+                    _linkTile(
+                      context,
+                      Icons.upgrade_outlined,
+                      t(context, 'Upgrade Guide', '升级指南'),
+                      'https://manager.mosona.cc/docs/quickstart#upgrade',
                     ),
                     Divider(height: 1, indent: 16, color: theme.dividerColor),
                     _linkTile(
@@ -111,6 +118,13 @@ class _AboutPageState extends ConsumerState<AboutPage> {
                       Icons.code,
                       'GitHub',
                       'https://github.com/mosona-labs/mosona-manager',
+                    ),
+                    Divider(height: 1, indent: 16, color: theme.dividerColor),
+                    _linkTile(
+                      context,
+                      Icons.menu_book_outlined,
+                      t(context, 'Documentation', '文档'),
+                      'https://manager.mosona.cc',
                     ),
                   ],
                 ),
