@@ -144,11 +144,16 @@ enum MonitorConn { connecting, live, lost }
 /// throttles commits to 1/s (web parity) and exposes derived stats.
 class MonitorController extends Notifier<MonitorSnapshot?> {
   final _conn = ValueNotifier<MonitorConn>(MonitorConn.connecting);
+  final _revoked = ValueNotifier<bool>(false);
   SseClient? _sse;
   Timer? _throttle;
   MonitorSnapshot? _pending;
 
   ValueNotifier<MonitorConn> get conn => _conn;
+
+  /// True after the hub pushed `revoked` (team access removed) — the shell
+  /// listens and forces re-login, mirroring the web client's redirect.
+  ValueNotifier<bool> get revoked => _revoked;
 
   @override
   MonitorSnapshot? build() {
@@ -156,6 +161,7 @@ class MonitorController extends Notifier<MonitorSnapshot?> {
       _sse?.close();
       _throttle?.cancel();
       _conn.dispose();
+      _revoked.dispose();
     });
     subscribe();
     return null;
@@ -175,6 +181,7 @@ class MonitorController extends Notifier<MonitorSnapshot?> {
           _commitThrottled();
         } else if (e.event == 'revoked') {
           _conn.value = MonitorConn.lost;
+          _revoked.value = true;
           _sse?.close();
         }
       });

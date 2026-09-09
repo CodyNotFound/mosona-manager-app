@@ -419,7 +419,8 @@ class ApiServices {
   Future<AlertsData> alertsList() =>
       _ok(c.request('GET', '/api/v1/alert'), AlertsData.fromJson);
 
-  Future<void> alertSet(int serverId, String item, int threshold, int forDuration,
+  /// Returns the number of affected servers (web parity toast).
+  Future<int> alertSet(int serverId, String item, int threshold, int forDuration,
           {bool override = false}) =>
       _ok(
         c.request('PUT', '/api/v1/alert/$serverId', form: {
@@ -428,13 +429,13 @@ class ApiServices {
           'for_duration': forDuration,
           'override': override,
         }),
-        (_) {},
+        (d) => d is num ? d.toInt() : int.tryParse(d.toString()) ?? 0,
       );
 
-  Future<void> alertDelete(String item, int serverId, {bool override = false}) => _ok(
+  Future<int> alertDelete(String item, int serverId, {bool override = false}) => _ok(
         c.request('DELETE', '/api/v1/alert/$item/$serverId',
             query: {'override': override}),
-        (_) {},
+        (d) => d is num ? d.toInt() : int.tryParse(d.toString()) ?? 0,
       );
 
   // ---------------------------------------------------------------- logs
