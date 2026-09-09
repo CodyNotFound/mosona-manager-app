@@ -20,7 +20,8 @@ class AdminUsersPage extends ConsumerStatefulWidget {
 }
 
 class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
-  static const _pageSize = 20;
+  /// Per-page options mirror the web BottomPagination select.
+  static const _perPageOptions = [20, 50, 100, 500, 1000];
 
   final _searchController = TextEditingController();
   Timer? _debounce;
@@ -28,6 +29,7 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
   List<User> _users = [];
   int _total = 0;
   int _page = 1;
+  int _perPage = 20;
   String _verify = 'all'; // all | true | false
   bool _loading = true;
 
@@ -51,7 +53,7 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
     try {
       final pageData = await _api.adminUsersList(
         page: _page,
-        size: _pageSize,
+        size: _perPage,
         search: _searchController.text.trim(),
         verify: _verify,
       );
@@ -76,7 +78,7 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
     });
   }
 
-  int get _totalPages => _total <= 0 ? 1 : (_total / _pageSize).ceil();
+  int get _totalPages => _total <= 0 ? 1 : (_total / _perPage).ceil();
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +218,31 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
                           }
                         : null,
                     icon: const Icon(Icons.chevron_right),
+                  ),
+                  const SizedBox(width: 8),
+                  // Per-page selector (web BottomPagination).
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: _perPage,
+                      isDense: true,
+                      borderRadius: BorderRadius.circular(10),
+                      items: [
+                        for (final s in _perPageOptions)
+                          DropdownMenuItem<int>(
+                            value: s,
+                            child: Text(t(context, '$s / page', '$s 条/页'),
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null || v == _perPage) return;
+                        setState(() {
+                          _perPage = v;
+                          _page = 1;
+                        });
+                        _load();
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -447,6 +474,11 @@ class _UserFormSheetState extends ConsumerState<_UserFormSheet> {
 
   ApiServices get _api => ref.read(apiProvider);
 
+  /// Web parity (admin/page/users/edit.tsx:150-162): the admin's current
+  /// password is required when changing the password OR the admin flag.
+  bool get _needsCurrentPassword =>
+      _password.text.isNotEmpty || _admin != (_existing?.isAdmin ?? false);
+
   @override
   void dispose() {
     _username.dispose();
@@ -465,6 +497,17 @@ class _UserFormSheetState extends ConsumerState<_UserFormSheet> {
     }
     if (_existing == null && _password.text.isEmpty) {
       toastWarn(context, t(context, 'Password is required', '密码必填'));
+      return;
+    }
+    if (_existing != null &&
+        _needsCurrentPassword &&
+        _currentPassword.text.isEmpty) {
+      toastWarn(
+        context,
+        t(context,
+            'Your (admin) password is required to change the password or admin flag.',
+            '修改密码或管理员标志时需要输入管理员当前密码。'),
+      );
       return;
     }
     setState(() => _saving = true);
@@ -557,10 +600,13 @@ class _UserFormSheetState extends ConsumerState<_UserFormSheet> {
           TextField(
             controller: _currentPassword,
             obscureText: true,
+            onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               labelText: t(context, 'Current password', '当前密码'),
-              helperText: t(context, 'Required only to change password',
-                  '仅修改密码时需要填写'),
+              helperText: _needsCurrentPassword
+                  ? t(context, 'Required', '必填')
+                  : t(context, 'Required only to change password',
+                      '仅修改密码时需要填写'),
               isDense: true,
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(8)),

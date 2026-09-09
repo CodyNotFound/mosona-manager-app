@@ -130,7 +130,12 @@ class _AdminSettingsGeneralPageState
   Future<void> _save() async {
     final entries = <({String key, String value})>[];
     final title = _title.text.trim();
-    final domain = _domain.text.trim();
+    // Web parity: strip trailing slashes before saving the domain
+    // (admin/page/settings/general/index.tsx:106-110).
+    var domain = _domain.text.trim();
+    while (domain.endsWith('/')) {
+      domain = domain.substring(0, domain.length - 1);
+    }
     if (title != _oTitle) {
       entries.add((key: 'title', value: title));
     }
