@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter, LengthLimitingTextInputFormatter;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
@@ -45,6 +47,46 @@ String hexFromColor(Color c) {
   return '#${part(c.r)}${part(c.g)}${part(c.b)}';
 }
 
+/// WCAG relative luminance (web utils/color.ts rgbToLuminance).
+double _luminanceChannel(double v) =>
+    v <= 0.03928 ? v / 12.92 : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+
+double luminanceOf(Color c) =>
+    0.2126 * _luminanceChannel(c.r) +
+    0.7152 * _luminanceChannel(c.g) +
+    0.0722 * _luminanceChannel(c.b);
+
+double contrastRatio(double l1, double l2) {
+  final hi = math.max(l1, l2);
+  final lo = math.min(l1, l2);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/// Picks a text color with >= 4.5:1 contrast against [bg], mirroring the web
+/// avatar logic (components/team/avatar.tsx:59-95): walk lightness in 0.05
+/// steps starting away from the background's lightness, fall back to b/w.
+Color contrastTextFor(Color bg) {
+  final bgLum = luminanceOf(bg);
+  const target = 4.5;
+  final hsl = HSLColor.fromColor(bg);
+  final preferredDir = hsl.lightness > 0.5 ? -1 : 1;
+
+  Color? tryDirection(int dir) {
+    for (var i = 0; i <= 20; i++) {
+      final newL = (hsl.lightness + dir * i * 0.05).clamp(0.0, 1.0);
+      final candidate = hsl.withLightness(newL).toColor();
+      if (contrastRatio(bgLum, luminanceOf(candidate)) >= target) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  final found = tryDirection(preferredDir) ?? tryDirection(-preferredDir);
+  if (found == null) return bgLum > 0.5 ? Colors.black : Colors.white;
+  return found;
+}
+
 /// Color circle with the team name initial (used in team lists).
 class TeamAvatar extends StatelessWidget {
   const TeamAvatar({
@@ -60,14 +102,15 @@ class TeamAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bg = colorFromHex(colorHex);
     final initial = name.isEmpty ? '?' : name.substring(0, 1).toUpperCase();
     return CircleAvatar(
       radius: size / 2,
-      backgroundColor: colorFromHex(colorHex),
+      backgroundColor: bg,
       child: Text(
         initial,
         style: TextStyle(
-          color: Colors.white,
+          color: contrastTextFor(bg),
           fontWeight: FontWeight.w700,
           fontSize: size * 0.42,
         ),
@@ -84,11 +127,14 @@ class TeamAvatar extends StatelessWidget {
 class AvatarEditor extends StatefulWidget {
   const AvatarEditor({
     super.key,
+    this.name = '',
     this.initialColor = kDefaultTeamColor,
     this.initialImageUrl,
     this.onChanged,
   });
 
+  /// Team name used for the avatar initial (web parity).
+  final String name;
   final String initialColor;
 
   /// Network URL of the currently stored image avatar (may be null).
@@ -106,18 +152,20 @@ class _AvatarEditorState extends State<AvatarEditor> {
   Uint8List? _bytes;
   bool _busy = false;
   bool _initialImageFailed = false;
+  late final _hexCtrl = TextEditingController(text: widget.initialColor);
 
   bool get _usingImage =>
       _imageMode &&
       (_bytes != null ||
           (widget.initialImageUrl != null && !_initialImageFailed));
 
-  void _setColor(Color c) {
+  void _setColor(Color c, {String? hexText}) {
     setState(() {
       _color = c;
       _bytes = null;
       _imageMode = false;
       _hue = HSLColor.fromColor(c).hue;
+      _hexCtrl.text = hexText ?? hexFromColor(c);
     });
     widget.onChanged?.call(hexFromColor(c), null);
   }
@@ -160,8 +208,17 @@ class _AvatarEditorState extends State<AvatarEditor> {
   }
 
   @override
+  void dispose() {
+    _hexCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final initial = widget.name.isEmpty
+        ? 'A'
+        : widget.name.substring(0, 1).toUpperCase();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -182,8 +239,12 @@ class _AvatarEditorState extends State<AvatarEditor> {
                 radius: 36,
                 backgroundColor: _color,
                 child: Text(
-                  '#',
-                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700),
+                  initial,
+                  style: TextStyle(
+                    color: contrastTextFor(_color),
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             const SizedBox(width: 16),
@@ -276,6 +337,31 @@ class _AvatarEditorState extends State<AvatarEditor> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 10),
+        // Free-form hex input, web parity (components/team/avatar.tsx:160-166).
+        TextField(
+          controller: _hexCtrl,
+          decoration: InputDecoration(
+            labelText: t(context, 'Hex color', 'Hex 颜色'),
+            hintText: '#16a34a',
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[#0-9a-fA-F]')),
+            LengthLimitingTextInputFormatter(7),
+          ],
+          onChanged: (v) {
+            final c = colorFromHex(v);
+            setState(() {
+              _color = c;
+              _bytes = null;
+              _imageMode = false;
+              _hue = HSLColor.fromColor(c).hue;
+            });
+            widget.onChanged?.call(hexFromColor(c), null);
+          },
         ),
       ],
     );

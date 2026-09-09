@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Directory, File;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/api/api_client.dart';
@@ -138,19 +140,36 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         toastWarn(context, t(context, 'User not found', '未找到该用户'));
         return;
       }
-      if (_members.any((m) => m.user.id == user.id)) {
+      // Duplicate check by id or email (web page/team/index.tsx:481-489).
+      if (_members.any((m) =>
+          m.user.id == user.id ||
+          (m.user.email.isNotEmpty && m.user.email == user.email))) {
         toastWarn(context, t(context, 'Already a member', '已是团队成员'));
         return;
       }
-      setState(() => _members = [..._members, TeamMember(user: user, role: 1)]);
+      // Web parity: new members default to full access (role 0).
+      setState(() => _members = [..._members, TeamMember(user: user, role: 0)]);
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
   }
 
+  // ------------------------------------------------------------- totp gate
+
+  /// Web parity (page/team/index.tsx:186-190,313-317): export/import require
+  /// TOTP. When the current user has none enabled, open the guided enable
+  /// flow (QR + confirm) first instead of asking for a code.
+  Future<bool> _ensureTotp() async {
+    if (_me?.totpEnabled == true) return true;
+    if (!mounted) return false;
+    final ok = await showEnableTotpDialog(context, ref);
+    return ok;
+  }
+
   // ---------------------------------------------------------------- export
 
   Future<void> _exportTeam() async {
+    if (!await _ensureTotp() || !mounted) return;
     final creds = await showCredsDialog(
       context,
       title: t(context, 'Export team', '导出团队'),
@@ -206,8 +225,20 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         final fileName =
             '$teamName-export-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json';
         try {
-          await SharePlus.instance
-              .share(ShareParams(text: jsonEncode(res.data), subject: fileName));
+          // Land the export as a real .json file like the web download
+          // (page/team/index.tsx:159-173).
+          final file =
+              File('${Directory.systemTemp.path}/$fileName');
+          await file.writeAsString(
+              '${const JsonEncoder.withIndent('  ').convert(res.data)}\n',
+              flush: true);
+          await SharePlus.instance.share(ShareParams(
+            files: [XFile(file.path, mimeType: 'application/json')],
+            subject: fileName,
+          ));
+          try {
+            await file.delete();
+          } catch (_) {}
         } catch (_) {}
         if (mounted) toastSuccess(context);
         return;
@@ -223,14 +254,24 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         }
         final m = res.data is Map<String, dynamic>
             ? res.data as Map<String, dynamic>
-            : null;
-        final what =
-            m == null ? '' : ' ${m['server_name'] ?? m['key_name'] ?? ''}'.trimRight();
+            : const <String, dynamic>{};
+        final serverName = (m['server_name'] ?? '').toString();
+        final credential = (m['credential'] ?? '').toString();
+        final what = credentialLabel(context, credential);
         final ok = await confirmDialog(
           context,
-          title: t(context, 'Skip unreadable credentials?', '跳过无法读取的凭证？'),
-          message: '${res.msg}${what.isEmpty ? '' : '\n$what'}',
-          okLabel: t(context, 'Skip & continue', '跳过并继续'),
+          title: t(context, 'Unreadable server credential', '无法读取的服务器凭证'),
+          message: what.isEmpty || serverName.isEmpty
+              ? res.msg
+              : t(
+                  context,
+                  'The $what of server "$serverName" cannot be decrypted with the Hub encryption key.\n\n'
+                  'Repair it on that server - re-enter the credential or reinstall the Agent - or export while skipping unreadable servers.',
+                  '服务器“$serverName”的$what无法用 Hub 加密密钥解密。\n\n'
+                      '请在该服务器上修复（重新录入凭证或重装 Agent），或在导出时跳过无法读取的服务器。',
+                ),
+          okLabel: t(context, 'Skip Unreadable and Export', '跳过并继续导出'),
+          danger: true,
         );
         if (!ok || !mounted) return;
         skip = true;
@@ -244,7 +285,10 @@ class _TeamPageState extends ConsumerState<TeamPage> {
 
   // ---------------------------------------------------------------- import
 
+  static const _encryptedExportFormat = 'mosona-team-export-v1';
+
   Future<void> _importTeam() async {
+    if (!await _ensureTotp() || !mounted) return;
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
@@ -266,14 +310,35 @@ class _TeamPageState extends ConsumerState<TeamPage> {
       toastWarn(context, t(context, 'Invalid JSON file', 'JSON 文件无效'));
       return;
     }
-
+    // Structural validation up front, like the web picker
+    // (page/team/index.tsx:234-264): encrypted exports must carry
+    // ciphertext/salt/nonce so errors don't surface only from the server.
+    if (parsed is! Map<String, dynamic>) {
+      toastWarn(context, t(context, 'Invalid team export file', '团队导出文件无效'));
+      return;
+    }
+    final isEncryptedFile = parsed['format'] == _encryptedExportFormat;
     Map<String, dynamic>? encrypted;
     dynamic data;
+    if (isEncryptedFile) {
+      if ((parsed['ciphertext'] ?? '').toString().isEmpty ||
+          (parsed['salt'] ?? '').toString().isEmpty ||
+          (parsed['nonce'] ?? '').toString().isEmpty) {
+        toastWarn(
+          context,
+          t(context,
+              'Invalid encrypted team export file', '加密团队导出文件无效'),
+        );
+        return;
+      }
+      encrypted = parsed;
+    } else {
+      data = parsed;
+    }
+
     String? password;
     (String, String)? creds;
-    if (parsed is Map<String, dynamic> &&
-        parsed['encrypted'] is Map<String, dynamic>) {
-      encrypted = parsed['encrypted'] as Map<String, dynamic>;
+    if (encrypted != null) {
       creds = await showCredsDialog(
         context,
         title: t(context, 'Import team', '导入团队'),
@@ -285,7 +350,6 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         ),
       );
     } else {
-      data = parsed;
       creds = await showCredsDialog(
         context,
         title: t(context, 'Import team', '导入团队'),
@@ -295,7 +359,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
     }
     if (creds == null || !mounted) return;
     password = creds.$1.isEmpty ? null : creds.$1;
-    final totp = creds.$2;
+    var totp = creds.$2;
 
     var trust = false;
     while (true) {
@@ -315,27 +379,22 @@ class _TeamPageState extends ConsumerState<TeamPage> {
       if (res.isOk) {
         if (!mounted) return;
         toastSuccess(context, t(context, 'Team imported', '导入成功'));
+        // Web parity: servers changed elsewhere too -> notify listeners.
+        ref.read(mutationBusProvider).notifyServersChanged();
         await ref.read(sessionProvider.notifier).refresh();
         ref.read(teamDataProvider.notifier).refresh();
         return;
       }
       if (res.code == 'legacy_ssh_host_key_confirmation_required') {
+        if (!mounted) return;
         final m = res.data is Map<String, dynamic>
             ? res.data as Map<String, dynamic>
-            : <String, dynamic>{};
+            : const <String, dynamic>{};
         final servers =
-            (m['servers'] as List? ?? []).map((e) => e.toString()).join(', ');
-        if (!mounted) return;
-        final ok = await confirmDialog(
-          context,
-          title: t(context, 'Trust legacy SSH host keys?', '信任旧版 SSH 主机密钥？'),
-          message: servers.isEmpty
-              ? res.msg
-              : '${res.msg}\n${m['count'] ?? ''}: $servers',
-          okLabel: t(context, 'Trust & continue', '信任并继续'),
-          danger: true,
-        );
-        if (!ok || !mounted) return;
+            (m['servers'] as List? ?? []).map((e) => e.toString()).toList();
+        final nextTotp = await _showLegacyHostKeyDialog(servers, res.msg);
+        if (nextTotp == null || !mounted) return;
+        totp = nextTotp;
         trust = true;
         continue;
       }
@@ -350,6 +409,117 @@ class _TeamPageState extends ConsumerState<TeamPage> {
       showApiError(context, ApiException(res.code, res.msg, data: res.data));
       return;
     }
+  }
+
+  /// Legacy SSH host key confirmation (web page/team/index.tsx:719-769):
+  /// lists the affected servers, shows the risk note and asks for a fresh
+  /// TOTP code before retrying with trust=true. Returns the new code.
+  Future<String?> _showLegacyHostKeyDialog(
+      List<String> servers, String serverMsg) {
+    final totpCtrl = TextEditingController();
+    bool valid = false;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  size: 20, color: Theme.of(ctx).colorScheme.error),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(t(context, 'Unverified SSH host keys',
+                    'SSH 主机密钥未经验证')),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  servers.isEmpty
+                      ? serverMsg
+                      : t(context,
+                          'This older export contains ${servers.length} SSH server(s) without pinned host keys.',
+                          '此旧版备份包含 ${servers.length} 台未固定主机密钥的 SSH 服务器。'),
+                  style: const TextStyle(fontSize: 13),
+                ),
+                if (servers.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 140),
+                    width: double.maxFinite,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Theme.of(ctx).dividerColor),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final s in servers)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: SelectableText(s,
+                                  style: const TextStyle(fontSize: 12)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Text(
+                  t(
+                    context,
+                    'These hosts will be trusted by default after import. A network attacker could impersonate them until you edit each server and confirm its fingerprint.',
+                    '导入后这些主机将被默认信任。在你逐台编辑并确认指纹之前，网络攻击者可能仿冒它们。',
+                  ),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(ctx).colorScheme.error),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: totpCtrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  onChanged: (v) =>
+                      setDialogState(() => valid = RegExp(r'^\d{6}$').hasMatch(v.trim())),
+                  decoration: InputDecoration(
+                    labelText: t(context, 'TOTP code', 'TOTP 验证码'),
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: Text(t(context, 'Cancel', '取消')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: valid
+                  ? () => Navigator.of(ctx).pop(totpCtrl.text.trim())
+                  : null,
+              child: Text(t(context, 'Accept Risk and Import', '接受风险并导入')),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ----------------------------------------------------------------- leave
@@ -391,9 +561,10 @@ class _TeamPageState extends ConsumerState<TeamPage> {
       return;
     }
     setState(() => _saving = true);
+    // Web parity: send each member's role as edited, without forcing our own
+    // row back to 0 (page/team/index.tsx:132-139).
     final members = [
-      for (final m in _members)
-        (id: m.user.id, role: m.user.id == _me?.id ? 0 : m.role),
+      for (final m in _members) (id: m.user.id, role: m.role),
     ];
     try {
       await _api.editTeam(
@@ -467,13 +638,18 @@ class _TeamPageState extends ConsumerState<TeamPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                AvatarEditor(
-                                  initialColor: _color,
-                                  initialImageUrl: _teamImageUrl,
-                                  onChanged: (hex, bytes) {
-                                    _color = hex;
-                                    _avatarBytes = bytes;
-                                  },
+                                ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: _name,
+                                  builder: (context, nameValue, _) =>
+                                      AvatarEditor(
+                                    name: nameValue.text,
+                                    initialColor: _color,
+                                    initialImageUrl: _teamImageUrl,
+                                    onChanged: (hex, bytes) {
+                                      _color = hex;
+                                      _avatarBytes = bytes;
+                                    },
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                                 TextField(
@@ -711,6 +887,167 @@ Future<(String, String)?> showCredsDialog(
       message: message,
     ),
   );
+}
+
+/// Web credential labels for the unreadable-credential dialog
+/// (page/team/index.tsx:175-184).
+String credentialLabel(BuildContext context, String credential) {
+  return switch (credential) {
+    'ssh_password' => t(context, 'SSH password', 'SSH 密码'),
+    'active_agent_private_key' => t(context, 'Agent private key', 'Agent 私钥'),
+    _ => credential,
+  };
+}
+
+/// Guided "Enable TOTP" flow (web components/totp/enable.tsx): asks the API
+/// for a secret + otpauth URL, shows the QR code and confirms a first code.
+/// Returns true when TOTP is enabled afterwards.
+Future<bool> showEnableTotpDialog(BuildContext context, WidgetRef ref) async {
+  final api = ref.read(apiProvider);
+  ({String secret, String url})? pair;
+  try {
+    pair = await api.totpEnable();
+  } catch (e) {
+    if (context.mounted) showApiError(context, e);
+    return false;
+  }
+  if (!context.mounted) return false;
+  final ok = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => _EnableTotpDialog(secret: pair!.secret, url: pair.url),
+  );
+  if (ok != true) return false;
+  // Refresh the session so user.totp_enabled reflects the new state
+  // (web refresh() callback).
+  await ref.read(sessionProvider.notifier).refresh();
+  return true;
+}
+
+class _EnableTotpDialog extends ConsumerStatefulWidget {
+  const _EnableTotpDialog({required this.secret, required this.url});
+
+  final String secret;
+  final String url;
+
+  @override
+  ConsumerState<_EnableTotpDialog> createState() => _EnableTotpDialogState();
+}
+
+class _EnableTotpDialogState extends ConsumerState<_EnableTotpDialog> {
+  final _code = TextEditingController();
+  bool _submitting = false;
+
+  bool get _valid => RegExp(r'^\d{6}$').hasMatch(_code.text.trim());
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting || !_valid) return;
+    setState(() => _submitting = true);
+    try {
+      await ref.read(apiProvider).totpConfirm(widget.secret, _code.text.trim());
+      if (!mounted) return;
+      toastSuccess(
+        context,
+        t(context, 'Two-factor authentication enabled', '两步验证已启用'),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      showApiError(context, e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text(t(context, 'Enable Two-Factor Authentication (TOTP)',
+          '启用两步验证（TOTP）')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              t(context,
+                  '1. Install an authenticator app (e.g., Google Authenticator, Authy) on your mobile device.',
+                  '1. 在手机上安装身份验证器应用（如 Google Authenticator、Authy）。'),
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              t(context, '2. Scan the QR code with the app.',
+                  '2. 使用身份验证器应用扫描二维码。'),
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: QrImageView(
+                  data: widget.url,
+                  size: 180,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Center(
+              child: SelectableText(
+                widget.secret,
+                style: TextStyle(
+                    fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              t(context,
+                  '3. Enter the 6-digit code from the app to verify and enable TOTP.',
+                  '3. 输入应用生成的 6 位验证码以验证并启用 TOTP。'),
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _code,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                labelText: t(context, 'TOTP code', 'TOTP 验证码'),
+                isDense: true,
+                border: const OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(t(context, 'Cancel', '取消')),
+        ),
+        LoadingButton(
+          label: t(context, 'Submit', '提交'),
+          loading: _submitting,
+          onPressed: _valid ? _submit : null,
+        ),
+      ],
+    );
+  }
 }
 
 class _CredsDialog extends StatefulWidget {

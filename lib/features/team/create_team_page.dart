@@ -78,11 +78,15 @@ class _CreateTeamPageState extends ConsumerState<CreateTeamPage> {
         toastWarn(context, t(context, 'User not found', '未找到该用户'));
         return;
       }
-      if (_members.any((m) => m.user.id == user.id)) {
+      // Duplicate check by id or email (web page/createTeam/index.tsx:170-186).
+      if (_members.any((m) =>
+          m.user.id == user.id ||
+          (m.user.email.isNotEmpty && m.user.email == user.email))) {
         toastWarn(context, t(context, 'Already a member', '已是团队成员'));
         return;
       }
-      setState(() => _members = [..._members, TeamMember(user: user, role: 1)]);
+      // Web parity: new members default to full access (role 0).
+      setState(() => _members = [..._members, TeamMember(user: user, role: 0)]);
     } catch (e) {
       if (mounted) showApiError(context, e);
     }
@@ -100,7 +104,7 @@ class _CreateTeamPageState extends ConsumerState<CreateTeamPage> {
       for (final m in _members) (id: m.user.id, role: m.role),
     ];
     try {
-      await _api.createTeam(
+      final teamId = await _api.createTeam(
         name: name,
         description: _desc.text.trim(),
         avatarColor: _color,
@@ -109,7 +113,9 @@ class _CreateTeamPageState extends ConsumerState<CreateTeamPage> {
       );
       if (!mounted) return;
       toastSuccess(context, t(context, 'Team created', '团队已创建'));
-      // Backend switches the active team on create; refresh both stores.
+      // Web parity: explicitly switch the active team to the new one, then
+      // refresh (page/createTeam/index.tsx:71-80).
+      await _api.setActiveTeam(teamId);
       await ref.read(sessionProvider.notifier).refresh();
       ref.read(teamDataProvider.notifier).refresh();
       if (mounted) context.go('/');
@@ -163,12 +169,16 @@ class _CreateTeamPageState extends ConsumerState<CreateTeamPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AvatarEditor(
-                      initialColor: _color,
-                      onChanged: (hex, bytes) {
-                        _color = hex;
-                        _avatarBytes = bytes;
-                      },
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _name,
+                      builder: (context, nameValue, _) => AvatarEditor(
+                        name: nameValue.text,
+                        initialColor: _color,
+                        onChanged: (hex, bytes) {
+                          _color = hex;
+                          _avatarBytes = bytes;
+                        },
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
