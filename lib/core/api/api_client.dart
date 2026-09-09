@@ -193,18 +193,15 @@ class ApiClient {
     if (body is Map<String, dynamic> && body['code'] is String) {
       final extras = <String, dynamic>{};
       body.forEach((k, v) {
-        if (k != 'code' && k != 'msg' && k != 'data') extras[k] = v;
+        if (k != 'code' && k != 'msg' && k != 'data' && k != 'version') extras[k] = v;
       });
       return Envelope(
         code: body['code'] as String,
         msg: (body['msg'] ?? '') as String,
-        data: body['data'],
+        // /api/v1/version returns {"code","version"} without a data field.
+        data: body['data'] ?? body['version'],
         extras: extras,
       );
-    }
-    // Special endpoints: /api/v1/version returns {"code","version"}.
-    if (body is Map<String, dynamic> && body['version'] is String) {
-      return Envelope(code: 'ok', msg: '', data: body['version']);
     }
     throw ApiException(
       'network',
