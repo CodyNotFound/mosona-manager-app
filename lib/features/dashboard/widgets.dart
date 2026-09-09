@@ -298,7 +298,10 @@ class _ServerCardState extends ConsumerState<ServerCard> {
     // web card.tsx:675-692 — expiry badge: >7d green, >3d orange, else red.
     Widget expiryBadge() {
       final end = server.endTime!;
-      final days = end.difference(DateTime.now()).inDays;
+      final remaining = end.difference(DateTime.now());
+      // inDays truncates toward zero, so an 11-hour-old expiry still read 0d
+      final expired = remaining.isNegative;
+      final days = remaining.inDays;
       final (Color fg, Color bg) = days > 7
           ? (MColors.online, MColors.badgeGreen)
           : days > 3
@@ -308,9 +311,9 @@ class _ServerCardState extends ConsumerState<ServerCard> {
         small: true,
         color: fg,
         backgroundColor: bg,
-        child: Text(days < 0
-            ? t(context, 'Expired', '已过期')
-            : '${t(context, 'Expired', '到期')}: ${days}d'),
+        child: Text(expired
+            ? t(context, 'Expired', '已过期', zhHk: '已過期')
+            : '${t(context, 'Expires', '到期', zhHk: '到期')}: ${days}d'),
       );
     }
 

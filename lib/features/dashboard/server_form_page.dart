@@ -550,6 +550,7 @@ class _ServerFormPageState extends ConsumerState<ServerFormPage> {
         ],
       ),
     );
+    ctrl.dispose();
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || !mounted) return;
     try {

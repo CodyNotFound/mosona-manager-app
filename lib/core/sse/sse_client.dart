@@ -177,6 +177,7 @@ class MonitorController extends Notifier<MonitorSnapshot?> {
   void subscribe() {
     _sse?.close();
     _conn.value = MonitorConn.connecting;
+    _revoked.value = false; // re-arm so a future revoke fires again
     final client = ref.read(apiClientProvider);
     _sse = SseClient(client: client, path: '/api/v1/server/monitor/sse')
       ..events.listen((e) {
@@ -190,6 +191,20 @@ class MonitorController extends Notifier<MonitorSnapshot?> {
           _conn.value = MonitorConn.lost;
           _revoked.value = true;
           _sse?.close();
+        } else if (e.event == 'error') {
+          // fatal auth errors carry a code: stop reconnecting (the session
+          // is gone); transient load failures keep the reconnect loop
+          try {
+            final code = (jsonDecode(e.data)
+                    as Map<String, dynamic>)['code']
+                ?.toString() ??
+                '';
+            if (code == 'login' || code == 'team_access_revoked') {
+              _conn.value = MonitorConn.lost;
+              _revoked.value = true;
+              _sse?.close();
+            }
+          } catch (_) {}
         }
       });
     _sse!.start();

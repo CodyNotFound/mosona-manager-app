@@ -713,30 +713,37 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
             ],
     );
 
-    // 3. Disk IO: read/write rates (thick) + IOPS (thin)
+    // 3. Disk IO split into two charts: throughput (KiB/s) and IOPS — they
+    // need different Y axes, one shared axis labels IOPS in byte units
     final io = mk(
       _extract(pts, [
         (s) => s.diskReadKibS,
         (s) => s.diskWriteKibS,
-        (s) => s.diskReadIops,
-        (s) => s.diskWriteIops,
       ]),
       [
         ChartSeriesStyle(label: t(context, 'Read', '读取', zhHk: '讀取'), color: MColors.chartBlue2, format: netRate),
         ChartSeriesStyle(label: t(context, 'Write', '写入', zhHk: '寫入'), color: MColors.chartYellow2, format: netRate),
+      ],
+      mode: chartAgg('io'),
+      yFmt: netRate,
+    );
+    final ioIops = mk(
+      _extract(pts, [
+        (s) => s.diskReadIops,
+        (s) => s.diskWriteIops,
+      ]),
+      [
         ChartSeriesStyle(
             label: t(context, 'R IOPS', '读 IOPS', zhHk: '讀 IOPS'),
             color: MColors.chartBlue1,
-            strokeWidth: 1,
             format: (v) => compactNumber(v.round())),
         ChartSeriesStyle(
             label: t(context, 'W IOPS', '写 IOPS', zhHk: '寫 IOPS'),
             color: MColors.chartYellow1,
-            strokeWidth: 1,
             format: (v) => compactNumber(v.round())),
       ],
       mode: chartAgg('io'),
-      yFmt: netRate,
+      yFmt: (v) => compactNumber(v.round()),
     );
 
     // 4. Bandwidth rx/tx
@@ -833,10 +840,16 @@ class _MonitorPageState extends ConsumerState<MonitorPage> {
           [
             _legendChip(MColors.chartBlue2, t(context, 'Read', '读取', zhHk: '讀取')),
             _legendChip(MColors.chartYellow2, t(context, 'Write', '写入', zhHk: '寫入')),
+          ],
+          io,
+          modeKey: 'io'),
+      card(
+          t(context, 'Disk IOPS', '磁盘 IOPS', zhHk: '磁碟 IOPS'),
+          [
             _legendChip(MColors.chartBlue1, t(context, 'R IOPS', '读 IOPS', zhHk: '讀 IOPS')),
             _legendChip(MColors.chartYellow1, t(context, 'W IOPS', '写 IOPS', zhHk: '寫 IOPS')),
           ],
-          io,
+          ioIops,
           modeKey: 'io'),
       card(
           t(context, 'Bandwidth', '带宽', zhHk: '頻寬'),

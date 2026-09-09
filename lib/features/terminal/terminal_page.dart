@@ -481,6 +481,7 @@ class _CategoryManageSheetState extends ConsumerState<_CategoryManageSheet> {
         ],
       ),
     );
+    ctrl.dispose();
     if (!mounted || name == null || name.isEmpty || name == c.name) return;
     await _run(() => ref.read(apiProvider).categoryUpdate(c.id, name));
   }

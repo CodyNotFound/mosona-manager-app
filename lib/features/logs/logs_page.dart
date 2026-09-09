@@ -514,10 +514,19 @@ class _LogsPageState extends ConsumerState<LogsPage> {
     );
   }
 
-  String _catLabel(String c) {
-    if (c == 'all') return t(context, 'All', '全部');
-    return c[0].toUpperCase() + c.substring(1);
-  }
+  String _catLabel(String c) => switch (c) {
+        'all' => t(context, 'All', '全部', zhHk: '全部'),
+        'user' => t(context, 'User', '用户', zhHk: '使用者'),
+        'team' => t(context, 'Team', '团队', zhHk: '團隊'),
+        'server' => t(context, 'Server', '服务器', zhHk: '伺服器'),
+        'terminal' => t(context, 'Terminal', '终端', zhHk: '終端機'),
+        'category' => t(context, 'Category', '分类', zhHk: '分類'),
+        'oauth' => t(context, 'OAuth', 'OAuth'),
+        'settings' => t(context, 'Settings', '设置', zhHk: '設定'),
+        'security' => t(context, 'Security', '安全', zhHk: '保安'),
+        'login' => t(context, 'Login', '登录', zhHk: '登入'),
+        _ => c[0].toUpperCase() + c.substring(1),
+      };
 
   Widget _levelItem(ThemeData theme, String level) {
     final color = switch (level) {
@@ -558,10 +567,12 @@ class _LogsPageState extends ConsumerState<LogsPage> {
         _ => MColors.logLow,
       };
 
-  String _levelLabel(String level) {
-    if (level.isEmpty) return 'Low';
-    return level[0].toUpperCase() + level.substring(1);
-  }
+  String _levelLabel(String level) => switch (level) {
+        'low' => t(context, 'Low', '低', zhHk: '低'),
+        'medium' => t(context, 'Medium', '中', zhHk: '中'),
+        'high' => t(context, 'High', '高', zhHk: '高'),
+        _ => t(context, 'Low', '低', zhHk: '低'),
+      };
 
   Widget _logCard(ThemeData theme, m.AuditLog log, int index) {
     final time = log.time == null

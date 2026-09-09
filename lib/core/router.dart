@@ -92,15 +92,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/monitor/:id',
-        builder: (context, state) =>
-            MonitorPage(serverId: int.parse(state.pathParameters['id']!)),
+        builder: (context, state) => MonitorPage(
+            serverId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0),
       ),
       GoRoute(
         path: '/server-form',
         builder: (context, state) {
           final serverId = state.uri.queryParameters['id'];
           return ServerFormPage(
-            editServerId: serverId == null ? null : int.tryParse(serverId),
+            editServerId: serverId == null || serverId.isEmpty
+                ? null
+                : int.tryParse(serverId),
             copyFrom: state.extra as Map<String, dynamic>?,
           );
         },

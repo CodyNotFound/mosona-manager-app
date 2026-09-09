@@ -249,14 +249,18 @@ class ApiClient {
       });
       return Envelope(
         code: body['code'] as String,
-        msg: (body['msg'] ?? '') as String,
+        msg: body['msg']?.toString() ?? '',
         // /api/v1/version returns {"code","version"} without a data field.
         data: body['data'] ?? body['version'],
         extras: extras,
       );
     }
+    // a reachable server returning HTML/5xx is a server error, not a
+    // connection failure — surface the status so callers can branch on it
     throw ApiException(
-      'network',
+      (res.statusCode ?? 500) >= 500 || (res.statusCode ?? 500) >= 400
+          ? 'error'
+          : 'network',
       'HTTP ${res.statusCode}: unexpected response',
       httpStatus: res.statusCode,
     );

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -153,9 +154,18 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      ServerLifeStatus.online => ('online', MColors.online),
-      ServerLifeStatus.warning => ('warning', MColors.warning),
-      ServerLifeStatus.offline => ('offline', MColors.offline),
+      ServerLifeStatus.online => (
+          t(context, 'online', '在线', zhHk: '在線'),
+          MColors.online
+        ),
+      ServerLifeStatus.warning => (
+          t(context, 'warning', '警告', zhHk: '警告'),
+          MColors.warning
+        ),
+      ServerLifeStatus.offline => (
+          t(context, 'offline', '离线', zhHk: '離線'),
+          MColors.offline
+        ),
     };
     return MBadge(color: color, child: Text(label));
   }
@@ -224,7 +234,8 @@ class Gravatar extends StatelessWidget {
   final String email;
   final double size;
 
-  String get _hash => crypto.md5.convert(email.trim().toLowerCase().codeUnits).toString();
+  String get _hash =>
+      crypto.md5.convert(utf8.encode(email.trim().toLowerCase())).toString();
 
   @override
   Widget build(BuildContext context) {
@@ -677,8 +688,8 @@ Future<bool> confirmDialog(
 
 /// Monospace style used for server names (web parity).
 TextStyle monoStyle(BuildContext context, {double size = 13}) => TextStyle(
-      fontFamily: 'Menlo, Monaco, Courier New, monospace',
-      fontFeatures: const [],
+      fontFamily: 'Menlo',
+      fontFamilyFallback: ['Monaco', 'Courier New', 'monospace'],
       fontSize: size,
       fontWeight: FontWeight.w600,
     );
