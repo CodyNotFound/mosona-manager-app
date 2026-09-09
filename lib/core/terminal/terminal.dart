@@ -46,6 +46,13 @@ class TerminalSession extends ChangeNotifier {
   int _cols = 80;
   int _rows = 24;
 
+  /// Streaming UTF-8 decoder so multi-byte characters split across WS frames
+  /// are reassembled correctly (per-frame decode would garble them).
+  late final ChunkedConversionSink<List<int>> _outputSink =
+      const Utf8Codec(allowMalformed: true)
+          .decoder
+          .startChunkedConversion(_TerminalStringSink(terminal.write));
+
   void _setPhase(TerminalPhase p) {
     phase = p;
     notifyListeners();
@@ -72,7 +79,7 @@ class TerminalSession extends ChangeNotifier {
             terminal.write(data);
             lastError = data;
           } else if (data is List<int>) {
-            terminal.write(utf8.decode(data, allowMalformed: true));
+            _outputSink.add(Uint8List.fromList(data));
           }
         },
         onDone: _onDone,
@@ -194,4 +201,21 @@ class TerminalManager extends ChangeNotifier {
 
   /// First remaining session id after closing one, for auto-navigation.
   String? firstId() => _sessions.keys.isEmpty ? null : _sessions.keys.first;
+}
+
+/// Forwards decoded chunks straight into the terminal emulator.
+class _TerminalStringSink extends StringConversionSinkBase {
+  _TerminalStringSink(this._write);
+
+  final void Function(String) _write;
+
+  @override
+  void add(String str) => _write(str);
+
+  @override
+  void addSlice(String str, int start, int end, bool isLast) =>
+      _write(str.substring(start, end));
+
+  @override
+  void close() {}
 }
