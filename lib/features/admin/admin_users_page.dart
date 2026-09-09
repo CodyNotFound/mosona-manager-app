@@ -458,7 +458,7 @@ class _UserFormSheetState extends ConsumerState<_UserFormSheet> {
   late final TextEditingController _email =
       TextEditingController(text: _existing?.email ?? '');
   late final TextEditingController _password =
-      TextEditingController(text: _existing == null ? randomHex(8) : '');
+      TextEditingController(text: _existing == null ? randomPassword(10) : '');
   late final TextEditingController _currentPassword = TextEditingController();
   late bool _verified = _existing?.verified ?? true;
   late bool _admin = _existing?.isAdmin ?? false;
@@ -582,7 +582,7 @@ class _UserFormSheetState extends ConsumerState<_UserFormSheet> {
             suffixIcon: IconButton(
               tooltip: t(context, 'Random password', '随机密码'),
               onPressed: () =>
-                  setState(() => _password.text = randomHex(8)),
+                  setState(() => _password.text = randomPassword(10)),
               icon: const Icon(Icons.casino_outlined, size: 20),
             ),
           ),

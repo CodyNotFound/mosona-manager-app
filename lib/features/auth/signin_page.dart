@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -586,7 +587,7 @@ class _SignInPageState extends ConsumerState<SignInPage> {
   Widget _providerIcon(AuthProvider p) {
     final icon = p.icon;
     if (icon.startsWith('http')) {
-      return Image.network(
+      return SvgPicture.network(
         icon,
         width: 18,
         height: 18,

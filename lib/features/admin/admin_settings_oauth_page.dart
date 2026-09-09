@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -232,7 +233,7 @@ class _AdminSettingsOauthPageState
     if (icon.startsWith('http')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: Image.network(
+        child: SvgPicture.network(
           icon,
           width: size,
           height: size,
@@ -247,7 +248,7 @@ class _AdminSettingsOauthPageState
       if (base.isNotEmpty) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: Image.network(
+          child: SvgPicture.network(
             '$base/icons/${icon.toLowerCase()}.svg',
             width: size,
             height: size,
@@ -474,7 +475,7 @@ class _ProviderFormSheetState extends ConsumerState<_ProviderFormSheet> {
 
   late String _protocol = _existing?.protocol ?? 'oauth2'; // oauth2 | oidc
   late String _subject = _initSubject();
-  late bool _skip2fa = _existing?.skip2fa ?? true;
+  late bool _skip2fa = _existing?.skip2fa ?? false; // secure default
   late bool _enabled = _existing?.isEnabled ?? true;
   String? _template;
   bool _saving = false;

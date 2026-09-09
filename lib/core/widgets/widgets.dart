@@ -744,10 +744,19 @@ class _FadeSlideInState extends State<FadeSlideIn>
   }
 }
 
-/// Random hex string helper (e.g. default avatar colors, slug suffixes).
+/// Random hex string (avatar colors, slug suffixes). Uses a CSPRNG so the
+/// same helper is safe for generated passwords too.
 String randomHex(int length) {
-  final rnd = math.Random();
+  final rnd = math.Random.secure();
   const chars = '0123456789abcdef';
+  return List.generate(length, (_) => chars[rnd.nextInt(chars.length)]).join();
+}
+
+/// Human-friendly secure password (letters+digits, unambiguous characters)
+/// used by the admin user form's generator.
+String randomPassword(int length) {
+  final rnd = math.Random.secure();
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
   return List.generate(length, (_) => chars[rnd.nextInt(chars.length)]).join();
 }
 

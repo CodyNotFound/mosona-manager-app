@@ -324,6 +324,7 @@ class _TwoFaPageState extends ConsumerState<TwoFaPage> {
           focusNode: _focus[i],
           textAlign: TextAlign.center,
           keyboardType: TextInputType.number,
+          autofillHints: const [AutofillHints.oneTimeCode],
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           decoration: const InputDecoration(isDense: true),

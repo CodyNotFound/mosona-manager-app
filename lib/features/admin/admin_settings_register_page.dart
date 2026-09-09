@@ -107,6 +107,19 @@ class _AdminSettingsRegisterPageState
     }
   }
 
+  /// Dangerous switches act immediately on the server — confirm first and
+  /// revert the UI if the user backs out.
+  Future<void> _confirmToggle(
+      bool v, String title, void Function() apply) async {
+    final ok = await confirmDialog(context,
+        title: title, okLabel: t(context, 'Enable', '开启', zhHk: '開啟'));
+    if (ok) {
+      apply();
+    } else {
+      setState(() {}); // revert visual state
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -128,10 +141,15 @@ class _AdminSettingsRegisterPageState
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                 child: SwitchListTile(
                   value: _regEnabled,
-                  onChanged: (v) {
-                    setState(() => _regEnabled = v);
-                    _setFlag('registration_enabled', v);
-                  },
+                  onChanged: (v) => _confirmToggle(
+                    v,
+                    t(context, 'Enable public registration?', '开启公开注册？',
+                        zhHk: '開啟公開註冊？'),
+                    () {
+                      setState(() => _regEnabled = v);
+                      _setFlag('registration_enabled', v);
+                    },
+                  ),
                   contentPadding: EdgeInsets.zero,
                   title: Text(t(context, 'Registration enabled', '开放注册'),
                       style: const TextStyle(fontSize: 14)),

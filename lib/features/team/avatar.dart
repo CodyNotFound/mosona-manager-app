@@ -42,6 +42,13 @@ Color colorFromHex(String hex) {
   return v == null ? const Color(0xFF61390B) : Color(v);
 }
 
+/// True only for a complete parseable color (#rgb or #rrggbb) — used to
+/// keep half-typed hex like '#4b2' or '#4' from propagating upstream.
+bool hexColorComplete(String hex) {
+  final h = hex.trim().replaceAll('#', '');
+  return h.length == 3 || (h.length == 6 && int.tryParse(h, radix: 16) != null);
+}
+
 String hexFromColor(Color c) {
   String part(double v) => (v * 255.0).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
   return '#${part(c.r)}${part(c.g)}${part(c.b)}';
@@ -353,6 +360,11 @@ class _AvatarEditorState extends State<AvatarEditor> {
             LengthLimitingTextInputFormatter(7),
           ],
           onChanged: (v) {
+            // half-typed hex must not propagate as a bogus fallback color
+            if (!hexColorComplete(v)) {
+              setState(() {}); // just refresh; keep the last valid color
+              return;
+            }
             final c = colorFromHex(v);
             setState(() {
               _color = c;

@@ -73,7 +73,24 @@ class _AdminSettingsEmailPageState
     }
   }
 
+  // "test" sends whatever is saved server-side — require a clean form so the
+  // user cannot be misled by testing unsaved edits
+  bool get _dirty =>
+      _host.text != _oHost ||
+      _port.text != _oPort ||
+      _username.text != _oUsername ||
+      _password.text != _oPassword ||
+      _tls != _oTls;
+
   Future<void> _testEmail() async {
+    if (_dirty) {
+      toastWarn(
+          context,
+          t(context, 'Save before testing: test sends the saved config',
+              '请先保存：测试发送的是已保存的配置',
+              zhHk: '請先儲存：測試發送的是已儲存的設定'));
+      return;
+    }
     setState(() => _testing = true);
     try {
       await _api.adminTestEmail();
