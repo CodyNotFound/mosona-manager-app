@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- dio/web_socket_channel are pure Dart: the release manifest must
+         request networking itself or the app cannot reach any hub. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Mosona Manager"
         android:name="${applicationName}"
