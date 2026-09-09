@@ -38,8 +38,14 @@ void main() {
     expect(container.read(localeControllerProvider.notifier).isZh, isTrue);
     expect(prefs.getString('mosona-app-locale'), 'zh-CN');
 
+    // toggle cycles en -> zh-CN -> zh-HK -> en
+    container.read(localeControllerProvider.notifier).toggle();
+    expect(container.read(localeControllerProvider), 'zh-HK');
+    expect(container.read(localeControllerProvider.notifier).isZh, isTrue);
     container.read(localeControllerProvider.notifier).toggle();
     expect(container.read(localeControllerProvider), 'en');
+    container.read(localeControllerProvider.notifier).toggle();
+    expect(container.read(localeControllerProvider), 'zh-CN');
   });
 
   test('theme + server config controllers persist values', () async {
