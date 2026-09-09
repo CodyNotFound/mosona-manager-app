@@ -39,7 +39,6 @@ class _PublicPagePageState extends ConsumerState<PublicPagePage> {
   bool _enabled = false;
   bool _saving = false;
 
-  final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _domain = TextEditingController();
   final _title = TextEditingController();
@@ -47,6 +46,7 @@ class _PublicPagePageState extends ConsumerState<PublicPagePage> {
   final _css = TextEditingController();
   String? _nameError;
   String? _domainError;
+  String? _generalError;
 
   ApiServices get _api => ref.read(apiProvider);
 
@@ -84,6 +84,9 @@ class _PublicPagePageState extends ConsumerState<PublicPagePage> {
         _title.text = cfg.title ?? '';
         _description.text = cfg.description ?? '';
         _css.text = cfg.customCss ?? '';
+        _nameError = null;
+        _domainError = null;
+        _generalError = null;
         _loading = false;
       });
     } catch (e) {
@@ -100,38 +103,144 @@ class _PublicPagePageState extends ConsumerState<PublicPagePage> {
     if (mounted) toastSuccess(context, t(context, 'Copied', '已复制'));
   }
 
-  Future<void> _save() async {
+  // ------------------------------------------------------------ generation
+
+  /// Web parity (page/publicPage/index.tsx:42-46): slug of the team name
+  /// (max 20 chars, fallback "status") + 6 random chars, capped at 32.
+  String _generateRandomPathName() {
+    var slug = slugify(_teamName);
+    if (slug.length > 20) slug = slug.substring(0, 20);
+    final base = slug.isEmpty ? 'status' : slug;
+    var path = '$base-${randomHex(6)}';
+    if (path.length > 32) path = path.substring(0, 32);
+    while (path.endsWith('-')) {
+      path = path.substring(0, path.length - 1);
+    }
+    return path;
+  }
+
+  String _generateDefaultTitle() {
+    final base = _teamName.trim().isEmpty
+        ? t(context, 'Status Page', '状态页')
+        : _teamName.trim();
+    return t(context, '$base Status', '$base 状态');
+  }
+
+  String _generateDefaultDescription() {
+    final base = _teamName.trim().isEmpty
+        ? t(context, 'This team', '当前团队')
+        : _teamName.trim();
+    return t(context, 'The public status page for $base.', '$base 的公开状态页。');
+  }
+
+  // ------------------------------------------------------------ validation
+
+  String get _nameInvalidMsg => t(
+      context,
+      'Use 3-32 lowercase letters, numbers, or hyphens. Hyphens cannot be at the start or end.',
+      '使用 3-32 个小写字母、数字或连字符。连字符不能出现在开头或结尾。');
+
+  String? _validateName(String value) {
+    if (value.isEmpty) return null; // optional when a domain is set
+    if (!_nameRe.hasMatch(value)) return _nameInvalidMsg;
+    return null;
+  }
+
+  String? _validateDomain(String value) {
+    if (value.isEmpty) return null; // optional
+    if (value.contains('://') ||
+        RegExp(r'[/?#@]').hasMatch(value) ||
+        RegExp(r'\s').hasMatch(value)) {
+      return t(context,
+          'Enter a host only, without https://, paths, queries, fragments, or @.',
+          '仅填写主机名。不要包含 https://、路径、查询参数或 @。');
+    }
+    final labels = value.split('.');
+    if (labels.any((l) => l.isEmpty || !_labelRe.hasMatch(l))) {
+      return t(context, 'Enter a valid hostname, such as status.example.com.',
+          '请输入有效主机名，如 status.example.com。');
+    }
+    return null;
+  }
+
+  /// Web parity (page/publicPage/index.tsx:84-98): map known server messages
+  /// onto the matching form field; unmapped errors go to the toast.
+  ({String? name, String? domain, String? general})? _mapApiError(String msg) {
+    switch (msg) {
+      case 'Invalid public page name':
+      case 'Public page name is already in use':
+        return (name: msg, domain: null, general: null);
+      case 'Invalid public page domain':
+      case 'Public page domain is already in use':
+        return (name: null, domain: msg, general: null);
+      case 'At least one of name or domain is required when public page is enabled':
+      case 'Invalid request format':
+        return (name: null, domain: null, general: msg);
+      default:
+        return null;
+    }
+  }
+
+  // ------------------------------------------------------------ submission
+
+  Future<void> _save({String? nameOverride, String? domainOverride}) async {
     if (_saving) return;
+    // Normalize like the web submit (page/publicPage/index.tsx:214-250):
+    // lowercase + trim for name/domain, trim for title/description, and the
+    // page is forced off when both identifiers are empty.
+    final nextName = (nameOverride ?? _name.text).trim().toLowerCase();
+    final nextDomain = (domainOverride ?? _domain.text).trim().toLowerCase();
+    final nextTitle = _title.text.trim();
+    final nextDescription = _description.text.trim();
+    final nextEnabled =
+        _enabled && (nextName.isNotEmpty || nextDomain.isNotEmpty);
+
+    // Web only validates while the page is enabled, so a disabled config can
+    // always be saved (page/publicPage/index.tsx:222-238).
+    String? nameError;
+    String? domainError;
+    if (nextEnabled) {
+      nameError = _validateName(nextName);
+      domainError = _validateDomain(nextDomain);
+    }
+
+    if (nameError != null || domainError != null) {
+      setState(() {
+        _nameError = nameError;
+        _domainError = domainError;
+        _generalError = null;
+      });
+      return;
+    }
+
     setState(() {
       _nameError = null;
       _domainError = null;
+      _generalError = null;
+      _saving = true;
     });
-    if (!_formKey.currentState!.validate()) return;
-    final cfg = PublicPageConfig(
-      enabled: _enabled,
-      name: _name.text.trim(),
-      domain: _domain.text.trim(),
-      title: _title.text.trim(),
-      description: _description.text.trim(),
-      customCss: _css.text,
-    );
-    setState(() => _saving = true);
     try {
-      await _api.updatePublicPage(cfg);
+      await _api.updatePublicPage(PublicPageConfig(
+        enabled: nextEnabled,
+        name: nextName,
+        domain: nextDomain,
+        title: nextTitle,
+        description: nextDescription,
+        customCss: _css.text.trim().isEmpty ? '' : _css.text,
+      ));
       if (!mounted) return;
       toastSuccess(context);
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (e.code == 'conflict') {
-        final msg = e.msg.toLowerCase();
+      final mapped = _mapApiError(e.msg);
+      if (mapped != null) {
         setState(() {
-          if (msg.contains('domain')) {
-            _domainError = e.msg;
-          } else {
-            _nameError = e.msg;
-          }
+          _nameError = mapped.name;
+          _domainError = mapped.domain;
+          _generalError = mapped.general;
         });
+        return;
       }
       showApiError(context, e);
     } catch (e) {
@@ -141,33 +250,19 @@ class _PublicPagePageState extends ConsumerState<PublicPagePage> {
     }
   }
 
-  String? _nameValidator(String? v) {
-    final s = (v ?? '').trim();
-    if (!_nameRe.hasMatch(s)) {
-      return t(context,
-          '3-32 chars: lowercase letters, digits, hyphen (no leading/trailing hyphen)',
-          '3-32 位小写字母、数字或连字符（首尾不能是连字符）');
-    }
-    return null;
-  }
-
-  String? _domainValidator(String? v) {
-    final s = (v ?? '').trim().toLowerCase();
-    if (s.isEmpty) return null; // optional
-    final labels = s.split('.');
-    if (labels.length < 2 ||
-        labels.any((l) => l.isEmpty || !_labelRe.hasMatch(l))) {
-      return t(context, 'Enter a valid hostname (e.g. status.example.com)',
-          '请输入有效主机名（如 status.example.com）');
-    }
-    return null;
-  }
-
-  String? _titleValidator(String? v) {
-    if ((v ?? '').length > 255) {
-      return t(context, 'Max 255 characters', '最多 255 个字符');
-    }
-    return null;
+  /// One-tap clear for path/domain that immediately persists the change
+  /// (web page/publicPage/index.tsx:272-280,436-445,477-485).
+  Future<void> _clearField({required bool isName}) async {
+    setState(() {
+      if (isName) {
+        _name.text = '';
+        _nameError = null;
+      } else {
+        _domain.text = '';
+        _domainError = null;
+      }
+    });
+    await _save(nameOverride: isName ? '' : null, domainOverride: isName ? null : '');
   }
 
   @override
@@ -248,105 +343,152 @@ class _PublicPagePageState extends ConsumerState<PublicPagePage> {
                       FadeSlideIn(
                         delay: _enabled ? 120 : 0,
                         child: MCard(
-                          child: Form(
-                            key: _formKey,
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(t(context, 'Enabled', '启用'),
-                                        style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600)),
-                                    const Spacer(),
-                                    Switch(
-                                      value: _enabled,
-                                      onChanged: (v) {
-                                        setState(() {
-                                          _enabled = v;
-                                          if (v) {
-                                            if (_name.text.trim().isEmpty) {
-                                              _name.text =
-                                                  '${slugify(_teamName)}-${randomHex(6)}';
-                                            }
-                                            if (_title.text.trim().isEmpty) {
-                                              _title.text = '$_teamName Status';
-                                            }
-                                          }
-                                        });
-                                      },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(t(context, 'Enabled', '启用'),
+                                            style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          t(
+                                              context,
+                                              'Expose a public status page for this team. When enabled a default path and title are generated for you.',
+                                              '公开本团队的状态页。启用时会自动生成默认路径与标题。'),
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: theme
+                                                  .colorScheme.onSurfaceVariant),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Switch(
+                                    value: _enabled,
+                                    onChanged: (v) {
+                                      setState(() {
+                                        _enabled = v;
+                                        _nameError = null;
+                                        _domainError = null;
+                                        _generalError = null;
+                                        if (v) {
+                                          if (_name.text.trim().isEmpty) {
+                                            _name.text = _generateRandomPathName();
+                                          }
+                                          if (_title.text.trim().isEmpty) {
+                                            _title.text = _generateDefaultTitle();
+                                          }
+                                          if (_description.text.trim().isEmpty) {
+                                            _description.text =
+                                                _generateDefaultDescription();
+                                          }
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _name,
+                                enabled: true,
+                                onChanged: (_) => setState(() {
+                                  _nameError = null;
+                                  _generalError = null;
+                                }),
+                                decoration: InputDecoration(
+                                  labelText: t(context, 'Path', '路径'),
+                                  hintText: 'my-status-page',
+                                  helperText: t(context,
+                                      '3-32 chars, lowercase letters, numbers, and hyphens only.',
+                                      '3-32 个字符，仅限小写字母、数字和连字符。'),
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                  errorText: _nameError,
+                                  suffixIcon: IconButton(
+                                    tooltip: t(context, 'Clear path', '清空路径'),
+                                    icon: const Icon(Icons.delete_outline, size: 20),
+                                    onPressed:
+                                        _name.text.isEmpty ? null : () => _clearField(isName: true),
+                                  ),
                                 ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _domain,
+                                onChanged: (_) => setState(() {
+                                  _domainError = null;
+                                  _generalError = null;
+                                }),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      t(context, 'Custom domain (optional)', '自定义域名（可选）'),
+                                  hintText: 'status.example.com',
+                                  helperText: t(context,
+                                      'Host only. Do not include https://, paths, query strings, or @.',
+                                      '仅填写主机名。不要包含 https://、路径、查询参数或 @。'),
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                  errorText: _domainError,
+                                  suffixIcon: IconButton(
+                                    tooltip: t(context, 'Clear domain', '清空域名'),
+                                    icon: const Icon(Icons.delete_outline, size: 20),
+                                    onPressed: _domain.text.isEmpty
+                                        ? null
+                                        : () => _clearField(isName: false),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _title,
+                                maxLength: 255,
+                                onChanged: (_) => setState(() {}),
+                                decoration: InputDecoration(
+                                  labelText: t(context, 'Title', '标题'),
+                                  counterText: '',
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _description,
+                                decoration: InputDecoration(
+                                  labelText: t(context, 'Description', '描述'),
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _css,
+                                maxLines: 5,
+                                style: monoStyle(context, size: 12),
+                                decoration: InputDecoration(
+                                  labelText: t(context, 'Custom CSS', '自定义 CSS'),
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                ),
+                              ),
+                              if (_generalError != null) ...[
+                                const SizedBox(height: 10),
                                 Text(
-                                  t(
-                                      context,
-                                      'Expose a public status page for this team. When enabled a default path and title are generated for you.',
-                                      '公开本团队的状态页。启用时会自动生成默认路径与标题。'),
+                                  _generalError!,
                                   style: TextStyle(
                                       fontSize: 12,
-                                      color: theme.colorScheme.onSurfaceVariant),
-                                ),
-                                const SizedBox(height: 14),
-                                TextFormField(
-                                  controller: _name,
-                                  enabled: true,
-                                  validator: _nameValidator,
-                                  decoration: InputDecoration(
-                                    labelText: t(context, 'Path', '路径'),
-                                    hintText: 'my-status-page',
-                                    isDense: true,
-                                    border: const OutlineInputBorder(),
-                                    errorText: _nameError,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _domain,
-                                  validator: _domainValidator,
-                                  decoration: InputDecoration(
-                                    labelText:
-                                        t(context, 'Custom domain (optional)', '自定义域名（可选）'),
-                                    hintText: 'status.example.com',
-                                    isDense: true,
-                                    border: const OutlineInputBorder(),
-                                    errorText: _domainError,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _title,
-                                  validator: _titleValidator,
-                                  decoration: InputDecoration(
-                                    labelText: t(context, 'Title', '标题'),
-                                    isDense: true,
-                                    border: const OutlineInputBorder(),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _description,
-                                  decoration: InputDecoration(
-                                    labelText: t(context, 'Description', '描述'),
-                                    isDense: true,
-                                    border: const OutlineInputBorder(),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _css,
-                                  maxLines: 5,
-                                  style: monoStyle(context, size: 12),
-                                  decoration: InputDecoration(
-                                    labelText: t(context, 'Custom CSS', '自定义 CSS'),
-                                    isDense: true,
-                                    border: const OutlineInputBorder(),
-                                  ),
+                                      color: theme.colorScheme.error),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
