@@ -33,25 +33,37 @@ class ThemeController extends Notifier<ThemeMode> {
   }
 }
 
+/// Supported UI languages: English, Simplified Chinese, Traditional Chinese.
+const kLocales = ['en', 'zh-CN', 'zh-HK'];
+
 class LocaleController extends Notifier<String> {
   @override
   String build() {
     final raw = _prefs().getString(_kLocale);
-    if (raw != null && (raw == 'en' || raw == 'zh-CN')) return raw;
-    final platform = PlatformDispatcher.instance.locale.toLanguageTag();
-    return platform.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
+    if (raw != null && kLocales.contains(raw)) return raw;
+    return _fromPlatform();
+  }
+
+  static String _fromPlatform() {
+    final tag = PlatformDispatcher.instance.locale.toLanguageTag().toLowerCase();
+    if (tag.startsWith('zh-tw') || tag.startsWith('zh-hk') || tag.startsWith('zh-mo')) {
+      return 'zh-HK';
+    }
+    if (tag.startsWith('zh')) return 'zh-CN';
+    return 'en';
   }
 
   SharedPreferences _prefs() => ref.read(sharedPrefsProvider);
 
   void set(String code) {
-    state = code;
-    _prefs().setString(_kLocale, code);
+    state = kLocales.contains(code) ? code : 'en';
+    _prefs().setString(_kLocale, state);
   }
 
-  void toggle() => set(state == 'en' ? 'zh-CN' : 'en');
+  /// Cycles EN -> 简体中文 -> 繁體中文 -> EN.
+  void toggle() => set(kLocales[(kLocales.indexOf(state) + 1) % kLocales.length]);
 
-  bool get isZh => state == 'zh-CN';
+  bool get isZh => state.startsWith('zh');
 }
 
 class ServerConfigController extends Notifier<String> {
@@ -88,8 +100,12 @@ final localeControllerProvider =
 final serverConfigProvider =
     NotifierProvider<ServerConfigController, String>(ServerConfigController.new);
 
-/// Inline bilingual string helper: `t(context, 'Hello', '你好')`.
-String t(BuildContext context, String en, String zh) {
-  final scope = ProviderScope.containerOf(context, listen: false);
-  return scope.read(localeControllerProvider) == 'zh-CN' ? zh : en;
+/// Inline trilingual string helper:
+/// `t(context, 'Hello', '你好', zhHk: '你好')` — [zhHk] falls back to [zh].
+String t(BuildContext context, String en, String zh, {String? zhHk}) {
+  final code =
+      ProviderScope.containerOf(context, listen: false).read(localeControllerProvider);
+  if (code == 'zh-CN') return zh;
+  if (code == 'zh-HK') return zhHk ?? zh;
+  return en;
 }

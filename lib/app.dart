@@ -30,7 +30,7 @@ class MosonaManagerApp extends ConsumerWidget {
       theme: MosunaTheme.light(),
       darkTheme: MosunaTheme.dark(),
       locale: locale,
-      supportedLocales: const [Locale('en'), Locale('zh', 'CN')],
+      supportedLocales: const [Locale('en'), Locale('zh', 'CN'), Locale('zh', 'HK')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 import '../state/controllers.dart';
+
+export '../state/controllers.dart' show t;
 import '../theme/mcolors.dart';
 import '../utils/format.dart';
 
@@ -42,7 +44,7 @@ class PageHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (actions != null) ...actions!,
+          ...?actions,
         ],
       ),
     );
