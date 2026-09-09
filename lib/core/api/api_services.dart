@@ -52,7 +52,7 @@ class ApiServices {
     try {
       await c.request('POST', '/api/auth/logout', form: {});
     } finally {
-      c.cookies.clear(Uri.parse(c.baseUrl).host);
+      c.cookies.clearHost(Uri.parse(c.baseUrl).host);
     }
   }
 

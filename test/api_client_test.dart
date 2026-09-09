@@ -90,6 +90,17 @@ void main() {
 }
 
 class _NoopStore implements CookieStore {
+  _NoopStore();
+
+  @override
+  Future<void> hydrate() async {}
+
+  @override
+  String? getFor(Uri uri) => null;
+
+  @override
+  String? headerFor(Uri uri) => null;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

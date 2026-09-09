@@ -20,6 +20,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   // notification settings
   bool _loadingNotif = true;
+  bool _notifLoadFailed = false;
   bool _savingNotif = false;
   List<String> _emails = [];
   final _emailCtrl = TextEditingController();
@@ -70,9 +71,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             if (n.module == 'shoutrrr') _PushRow(n.target),
         ];
         _loadingNotif = false;
+        _notifLoadFailed = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingNotif = false);
+      if (!mounted) return;
+      // a failed load must not turn the next save into "replace everything
+      // with what's on screen" — block saving until a load succeeds
+      setState(() {
+        _loadingNotif = false;
+        _notifLoadFailed = true;
+      });
     }
   }
 
@@ -149,6 +157,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _saveNotifications() async {
     if (_savingNotif) return;
+    if (_notifLoadFailed) {
+      toastWarn(
+          context,
+          t(context, 'Notification targets failed to load; retry before saving',
+              '通知目标加载失败，请先重试再保存',
+              zhHk: '通知目標載入失敗，請先重試再儲存'));
+      return;
+    }
     if (_pushes.any((p) => p.controller.text.trim().isEmpty)) {
       toastWarn(context, t(context, 'Push URL cannot be empty', '推送 URL 不能为空',
           zhHk: '推送 URL 不能為空'));

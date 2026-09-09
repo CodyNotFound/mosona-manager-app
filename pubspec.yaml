@@ -23,6 +23,7 @@ dependencies:
 
   # persistence & config
   shared_preferences: ^2.5.3
+  flutter_secure_storage: ^11.0.0
 
   # navigation
   go_router: ^18.0.1

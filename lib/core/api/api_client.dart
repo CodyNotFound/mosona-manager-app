@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../state/controllers.dart';
@@ -42,23 +43,74 @@ class ApiException implements Exception {
   String toString() => 'ApiException($httpStatus $code): $msg';
 }
 
-/// Session cookie persistence keyed by host, backed by SharedPreferences.
+/// Session cookie persistence, keyed by origin (scheme + host) so http and
+/// https never cross-send. Values live in flutter_secure_storage (Keychain /
+/// Keystore); an in-memory cache keeps lookups synchronous after [hydrate].
 class CookieStore {
-  CookieStore(this._prefs);
+  CookieStore(this._prefs, {FlutterSecureStorage? secure})
+      : _secure = secure ?? const FlutterSecureStorage();
 
   final SharedPreferences _prefs;
+  final FlutterSecureStorage _secure;
+  final Map<String, String> _cookies = {}; // 'scheme://host' -> session value
+  bool _hydrated = false;
 
-  String _key(String host) => 'mosona-app-cookie:${host.toLowerCase()}';
+  static const _kPrefix = 'mosona.cookie.';
+  static const _kLegacyPrefix = 'mosona-app-cookie:';
+  static const _kMigrated = 'mosona-app-cookie.migrated';
 
-  String? get(String host) => _prefs.getString(_key(host));
+  String _origin(String scheme, String host) =>
+      '$scheme://${host.toLowerCase()}';
 
-  void put(String host, String value) => _prefs.setString(_key(host), value);
+  /// Loads stored cookies and migrates any legacy plaintext entries once.
+  /// Must complete before the first request (called from main()).
+  Future<void> hydrate() async {
+    if (_hydrated) return;
+    _hydrated = true;
+    if (!(_prefs.getBool(_kMigrated) ?? false)) {
+      final legacyKeys = _prefs
+          .getKeys()
+          .where((k) => k.startsWith(_kLegacyPrefix))
+          .toList();
+      for (final k in legacyKeys) {
+        final v = _prefs.getString(k);
+        if (v != null && v.isNotEmpty) {
+          final origin = _origin('https', k.substring(_kLegacyPrefix.length));
+          await _secure.write(key: _kPrefix + origin, value: v);
+        }
+        await _prefs.remove(k);
+      }
+      await _prefs.setBool(_kMigrated, true);
+    }
+    final all = await _secure.readAll();
+    for (final e in all.entries) {
+      if (e.key.startsWith(_kPrefix)) {
+        _cookies[e.key.substring(_kPrefix.length)] = e.value;
+      }
+    }
+  }
 
-  void clear(String host) => _prefs.remove(_key(host));
+  String? getFor(Uri uri) => _cookies[_origin(uri.scheme, uri.host)];
+
+  void put(String scheme, String host, String value) {
+    final origin = _origin(scheme, host);
+    _cookies[origin] = value;
+    _secure.write(key: _kPrefix + origin, value: value);
+  }
+
+  /// Clears every origin (http + https) for [host].
+  void clearHost(String host) {
+    final suffix = '://${host.toLowerCase()}';
+    final keys = _cookies.keys.where((o) => o.endsWith(suffix)).toList();
+    for (final k in keys) {
+      _cookies.remove(k);
+      _secure.delete(key: _kPrefix + k);
+    }
+  }
 
   /// Builds a `Cookie:` header value for websocket / manual requests.
   String? headerFor(Uri uri) {
-    final v = get(uri.host);
+    final v = getFor(uri);
     return v == null ? null : 'session=$v';
   }
 }
@@ -93,8 +145,7 @@ class ApiClient {
     ));
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
-        final host = options.uri.host;
-        final session = cookies.get(host);
+        final session = cookies.getFor(options.uri);
         if (session != null) {
           options.headers['cookie'] = 'session=$session';
         }
@@ -120,11 +171,12 @@ class ApiClient {
       }
     }
     if (raw != null) {
+      final uri = response.requestOptions.uri;
       final value = raw.substring('session='.length);
       if (value.isNotEmpty) {
-        cookies.put(response.requestOptions.uri.host, value);
+        cookies.put(uri.scheme, uri.host, value);
       } else {
-        cookies.clear(response.requestOptions.uri.host);
+        cookies.clearHost(uri.host);
       }
     }
   }
@@ -251,10 +303,14 @@ const kPassthroughCodes = {
   'rate_limited',
 };
 
+final cookieStoreProvider = Provider<CookieStore>((ref) {
+  return CookieStore(ref.watch(sharedPrefsProvider));
+});
+
 final apiClientProvider = Provider<ApiClient>((ref) {
   final base = ref.watch(serverConfigProvider);
-  final prefs = ref.watch(sharedPrefsProvider);
-  final client = ApiClient(baseUrl: base, cookies: CookieStore(prefs));
+  final client =
+      ApiClient(baseUrl: base, cookies: ref.watch(cookieStoreProvider));
   ref.onDispose(client.dispose);
   return client;
 });
