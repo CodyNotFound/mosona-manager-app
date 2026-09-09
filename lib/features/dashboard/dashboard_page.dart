@@ -271,7 +271,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // web hook.ts:210-247 — "with status" counts any server with a report
     // (online or stale), only the online ones contribute to the averages.
     var onlineCount = 0;
-    var withStatus = 0;
     var cpuAcc = 0.0;
     var memAcc = 0.0;
     var rxAcc = 0.0;
@@ -279,7 +278,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     for (final s in servers) {
       final st = snap.status[s.id];
       if (st == null) continue;
-      withStatus++;
       final live =
           st.time != null && nowMs - st.time!.millisecondsSinceEpoch < 5000;
       if (!live) continue;
@@ -289,8 +287,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       rxAcc += st.rxKibS;
       txAcc += st.txKibS;
     }
-    final avgCpu = withStatus > 0 ? cpuAcc / withStatus : 0.0;
-    final avgMem = withStatus > 0 ? memAcc / withStatus : 0.0;
+    // averages divide by ONLINE servers only (web hook.ts:210-247); a server
+    // reporting mem_total_mb == 0 is skipped so the average cannot go NaN.
+    var memCount = 0;
+    for (final s in servers) {
+      final st = snap.status[s.id];
+      if (st == null || st.time == null) continue;
+      final live = nowMs - st.time!.millisecondsSinceEpoch < 5000;
+      if (live && st.memTotalMb > 0) memCount++;
+    }
+    final avgCpu = onlineCount > 0 ? cpuAcc / onlineCount : 0.0;
+    final avgMem = memCount > 0 ? memAcc / memCount : 0.0;
 
     // Totals — web index.tsx:86-103: all filtered servers with a report
     // (online or not); cores come from the server row itself, storage sums
