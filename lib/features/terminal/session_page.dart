@@ -70,10 +70,18 @@ class _SessionPageState extends ConsumerState<SessionPage> {
           AnimatedBuilder(animation: session, builder: _statusWidget),
           IconButton(
             icon: const Icon(Icons.close, size: 20),
-            tooltip: t(context, 'Close session', '关闭会话'),
+            tooltip: t(context, 'Close session', '关闭会话', zhHk: '關閉工作階段'),
             onPressed: () {
               mgr.close(session.id);
-              if (mounted) context.pop();
+              if (!mounted) return;
+              // Web parity: closing a session jumps to the first remaining one,
+              // or back to the terminal list when none are left.
+              final next = mgr.firstId();
+              if (next != null) {
+                context.pushReplacement('/session/$next');
+              } else {
+                context.pop();
+              }
             },
           ),
           const SizedBox(width: 4),
@@ -102,27 +110,27 @@ class _SessionPageState extends ConsumerState<SessionPage> {
     final session = _session!;
     final (label, color, dot) = switch (session.phase) {
       TerminalPhase.connected => (
-          t(context, 'Connected', '已连接'),
+          t(context, 'Connected', '已连接', zhHk: '已連線'),
           MColors.terminalConnected,
           '●',
         ),
       TerminalPhase.connecting => (
-          t(context, 'Connecting', '连接中'),
+          t(context, 'Connecting', '连接中', zhHk: '連線中'),
           MColors.terminalConnecting,
           '○',
         ),
       TerminalPhase.reconnecting => (
-          '${t(context, 'Reconnecting', '重连中')} #${session.reconnectAttempt}',
+          '${t(context, 'Reconnecting', '重连中', zhHk: '重新連線中')} #${session.reconnectAttempt}',
           MColors.terminalConnecting,
           '○',
         ),
       TerminalPhase.revoked => (
-          t(context, 'Revoked', '已吊销'),
+          t(context, 'Revoked', '已吊销', zhHk: '已註銷'),
           MColors.terminalDisconnected,
           '●',
         ),
       _ => (
-          t(context, 'Disconnected', '已断开'),
+          t(context, 'Disconnected', '已断开', zhHk: '未連線'),
           MColors.terminalDisconnected,
           '●',
         ),
@@ -139,7 +147,7 @@ class _SessionPageState extends ConsumerState<SessionPage> {
               padding: const EdgeInsets.symmetric(horizontal: 6),
             ),
             child: Text(
-              t(context, 'Reconnect', '重连'),
+              t(context, 'Reconnect', '重连', zhHk: '重新連線'),
               style: TextStyle(fontSize: 12, color: color),
             ),
           ),
@@ -185,7 +193,7 @@ class _SessionPageState extends ConsumerState<SessionPage> {
                 color: MColors.terminalDisconnected, size: 44),
             const SizedBox(height: 14),
             Text(
-              t(context, 'Team access revoked', '团队访问已被吊销'),
+              t(context, 'Team access revoked', '团队访问已被吊销', zhHk: '團隊存取已被註銷'),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
@@ -195,14 +203,14 @@ class _SessionPageState extends ConsumerState<SessionPage> {
             const SizedBox(height: 6),
             Text(
               t(context, 'This terminal session is no longer authorized.',
-                  '当前终端会话已无访问权限。'),
+                  '当前终端会话已无访问权限。', zhHk: '目前終端機工作階段已無存取權限。'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: () => context.pop(),
-              child: Text(t(context, 'Back', '返回')),
+              child: Text(t(context, 'Back', '返回', zhHk: '返回')),
             ),
           ],
         ),
