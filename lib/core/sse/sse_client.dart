@@ -52,6 +52,12 @@ class SseClient {
         ),
       );
       final stream = res.data?.stream;
+      // closed while awaiting headers, or a non-200 body (e.g. 401 after
+      // logout): stop instead of parsing an error page as an event stream
+      if (_closed || (res.statusCode ?? 500) != 200) {
+        _staleTimer?.cancel();
+        return;
+      }
       if (stream == null) {
         _scheduleReconnect();
         return;
@@ -124,6 +130,7 @@ class SseClient {
     _sub?.cancel();
     _staleTimer?.cancel();
     _reconnectTimer?.cancel();
+    if (!_events.isClosed) _events.close();
   }
 }
 

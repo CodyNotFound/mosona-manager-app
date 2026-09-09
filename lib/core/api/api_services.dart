@@ -47,8 +47,11 @@ class ApiServices {
       );
 
   Future<void> logout() async {
-    final e = await c.request('POST', '/api/auth/logout', form: {});
-    if (e.isOk) {
+    // Local cookie must go even if the server call fails (offline logout):
+    // otherwise the next cold start silently resurrects the session.
+    try {
+      await c.request('POST', '/api/auth/logout', form: {});
+    } finally {
       c.cookies.clear(Uri.parse(c.baseUrl).host);
     }
   }
@@ -534,7 +537,7 @@ class ApiServices {
           'email': email,
           'password': password,
           'verified': verified,
-          'admin': admin,
+          'is_admin': admin,
         }),
         (_) {},
       );

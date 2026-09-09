@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../api/api_services.dart';
+import '../sse/sse_client.dart' show monitorProvider;
 import '../models/models.dart';
 
 /// Global session state: current user, active team, all teams.
@@ -113,6 +114,9 @@ class SessionController extends Notifier<SessionState> {
     try {
       await _api.logout();
     } catch (_) {}
+    // drop the app-level monitor subscription: its SSE would keep pointing
+    // at the old hub / keep reconnecting with a dead cookie
+    ref.invalidate(monitorProvider);
     state = SessionState(status: SessionStatus.loggedOut);
   }
 
