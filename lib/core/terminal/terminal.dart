@@ -117,13 +117,16 @@ class TerminalSession extends ChangeNotifier {
   void write(String text) => terminal.write(text);
 
   void _onDone() {
+    // capture the close code before tearing down the channel
+    final code = _ws?.closeCode;
     _sub?.cancel();
     _sub = null;
     _ws?.sink.close();
     _ws = null;
 
-    final code = _ws?.closeCode;
+    // 1008 = policy violation: session revoked (team removed / logged out).
     if (code == 1008) {
+      terminal.write('\r\n[Access revoked]\r\n');
       _setPhase(TerminalPhase.revoked);
       return;
     }
